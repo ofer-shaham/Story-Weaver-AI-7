@@ -13,7 +13,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import { type StorySettings } from "@/hooks/use-settings";
 
 interface SettingsDialogProps {
@@ -48,40 +47,27 @@ export function SettingsDialog({ settings, onSave }: SettingsDialogProps) {
           <Settings className="w-5 h-5" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[460px] font-sans bg-card border-card-border max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[460px] font-sans bg-card border-card-border">
         <DialogHeader>
-          <DialogTitle className="font-serif text-xl text-primary">AI Settings</DialogTitle>
+          <DialogTitle className="font-serif text-xl text-primary">
+            AI Settings
+          </DialogTitle>
           <DialogDescription className="text-foreground/60">
-            Configure the model and generation parameters. Settings are saved locally in your browser.
+            Configure the model and generation parameters. Settings are saved
+            locally in your browser.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 py-2">
-          {/* Blind Mode */}
-          <div className="flex items-center justify-between rounded-lg border border-border/50 px-4 py-3 bg-background/50">
-            <div className="space-y-0.5">
-              <Label htmlFor="blindMode" className="text-sm font-medium">Blind Mode</Label>
-              <p className="text-xs text-muted-foreground">
-                The AI's response is read aloud, then you dictate your turn by voice.
-              </p>
-            </div>
-            <Switch
-              id="blindMode"
-              data-testid="switch-blind-mode"
-              checked={local.blindMode}
-              onCheckedChange={(checked) => setLocal((p) => ({ ...p, blindMode: checked }))}
-              className="ml-4 shrink-0"
-            />
-          </div>
-
-          {/* Model */}
           <div className="space-y-1.5">
             <Label htmlFor="model">Model</Label>
             <Input
               id="model"
               data-testid="input-model"
               value={local.model}
-              onChange={(e) => setLocal((p) => ({ ...p, model: e.target.value }))}
+              onChange={(e) =>
+                setLocal((p) => ({ ...p, model: e.target.value }))
+              }
               placeholder="openrouter/free"
               className="bg-background border-border focus-visible:ring-primary font-mono text-sm"
             />
@@ -92,29 +78,29 @@ export function SettingsDialog({ settings, onSave }: SettingsDialogProps) {
             </p>
           </div>
 
-          {/* Max Tokens */}
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <Label htmlFor="maxTokens">Max Tokens</Label>
-              <span className="text-sm tabular-nums text-muted-foreground">{local.maxTokens}</span>
+              <span className="text-sm tabular-nums text-muted-foreground">
+                {local.maxTokens}
+              </span>
             </div>
             <Slider
               id="maxTokens"
               data-testid="slider-max-tokens"
-              min={128}
-              max={8192}
-              step={128}
+              min={1}
+              max={100}
+              step={1}
               value={[local.maxTokens]}
               onValueChange={([v]) => setLocal((p) => ({ ...p, maxTokens: v }))}
               className="w-full"
             />
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>128</span>
-              <span>8192</span>
+              <span>1</span>
+              <span>100</span>
             </div>
           </div>
 
-          {/* Temperature */}
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <Label htmlFor="temperature">Temperature</Label>
@@ -129,7 +115,9 @@ export function SettingsDialog({ settings, onSave }: SettingsDialogProps) {
               max={2}
               step={0.05}
               value={[local.temperature]}
-              onValueChange={([v]) => setLocal((p) => ({ ...p, temperature: v }))}
+              onValueChange={([v]) =>
+                setLocal((p) => ({ ...p, temperature: v }))
+              }
               className="w-full"
             />
             <div className="flex justify-between text-xs text-muted-foreground">
@@ -138,42 +126,48 @@ export function SettingsDialog({ settings, onSave }: SettingsDialogProps) {
             </div>
           </div>
 
-          {/* Custom API */}
-          <div className="space-y-3 pt-2 border-t border-border/40">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          <div className="space-y-1.5 pt-2 border-t border-border/40">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
               Custom API (optional)
             </p>
-            <div className="space-y-1.5">
-              <Label htmlFor="apiKey">OpenRouter API Key</Label>
-              <Input
-                id="apiKey"
-                data-testid="input-api-key"
-                type="password"
-                value={local.apiKey}
-                onChange={(e) => setLocal((p) => ({ ...p, apiKey: e.target.value }))}
-                placeholder="sk-or-..."
-                className="bg-background border-border focus-visible:ring-primary font-mono text-sm"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="apiUrl">OpenRouter Base URL</Label>
-              <Input
-                id="apiUrl"
-                data-testid="input-api-url"
-                value={local.apiUrl}
-                onChange={(e) => setLocal((p) => ({ ...p, apiUrl: e.target.value }))}
-                placeholder="https://openrouter.ai/api/v1"
-                className="bg-background border-border focus-visible:ring-primary font-mono text-sm"
-              />
-              <p className="text-xs text-muted-foreground">
-                Leave blank to use the built-in Replit-managed key.
-              </p>
-            </div>
+            <Label htmlFor="apiKey">OpenRouter API Key</Label>
+            <Input
+              id="apiKey"
+              data-testid="input-api-key"
+              type="password"
+              value={local.apiKey}
+              onChange={(e) =>
+                setLocal((p) => ({ ...p, apiKey: e.target.value }))
+              }
+              placeholder="sk-or-..."
+              className="bg-background border-border focus-visible:ring-primary font-mono text-sm"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="apiUrl">OpenRouter Base URL</Label>
+            <Input
+              id="apiUrl"
+              data-testid="input-api-url"
+              value={local.apiUrl}
+              onChange={(e) =>
+                setLocal((p) => ({ ...p, apiUrl: e.target.value }))
+              }
+              placeholder="https://openrouter.ai/api/v1"
+              className="bg-background border-border focus-visible:ring-primary font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              Leave blank to use the built-in Replit-managed key.
+            </p>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} className="font-sans">
+          <Button
+            variant="outline"
+            onClick={() => setOpen(false)}
+            className="font-sans"
+          >
             Cancel
           </Button>
           <Button
