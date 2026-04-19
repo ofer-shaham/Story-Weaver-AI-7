@@ -1,0 +1,11 @@
+{
+  "openrouter": {
+    "model": "meta-llama/llama-4-scout",
+
+    "apiKey3": "_DUMMY_API_KEY_",
+    "apiUrl3": "http://localhost:1106/modelfarm/openrouter",
+    "apiKey": "sk-or-v1-???.1",
+    "apiUrl": "https://openrouter.ai/api/v1",
+    "model2": "openrouter/free"
+  }
+}

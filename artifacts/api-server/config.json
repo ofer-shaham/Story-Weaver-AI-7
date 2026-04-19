@@ -1,7 +1,0 @@
-{
-  "openrouter": {
-    "apiKey": "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.1",
-    "apiUrl": "https://openrouter.ai/api/v1",
-    "model": "openrouter/free"
-  }
-}

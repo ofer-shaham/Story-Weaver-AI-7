@@ -162,3 +162,10 @@ Filter by `Error` level to see only errors. Network errors (failed API calls) al
 | `pnpm --filter @workspace/api-spec run codegen`  | Regenerate API hooks and Zod schemas         |
 | `pnpm --filter @workspace/api-server run dev`    | Start API server in dev mode                 |
 | `pnpm --filter @workspace/story-app run dev`     | Start frontend dev server                    |
+
+
+---
+```sh
+#to set openrouter access - update config file:
+cp artifacts/api-server/config.json.example artifacts/api-server/config.json
+```
