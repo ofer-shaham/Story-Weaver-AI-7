@@ -158,8 +158,8 @@ router.post("/openrouter/conversations/:id/messages", async (req, res): Promise<
 
   const client = getClient(apiKey, apiUrl);
 
-  const effectiveMaxTokens = maxTokens ?? 200;
-  const approxMaxWords = Math.round(effectiveMaxTokens * 0.75);
+  const maxWords = maxTokens ?? 10;
+  const effectiveMaxTokens = Math.ceil(maxWords / 0.75);
 
   const stream = await client.chat.completions.create({
     model: model ?? DEFAULT_MODEL,
@@ -169,7 +169,7 @@ router.post("/openrouter/conversations/:id/messages", async (req, res): Promise<
       {
         role: "system",
         content:
-          `You are a collaborative storytelling AI friend. The user and you are writing a story together, taking turns. Write exactly one new creative paragraph that continues the story forward. IMPORTANT: Do not repeat, restate, or paraphrase anything that has already been written — only add brand-new content that hasn't appeared yet. Do not summarize or conclude the story — leave room for the user to continue. Be imaginative and engaging. Your response must be at most ${approxMaxWords} words long — stop at a natural sentence boundary within that limit.`,
+          `You are a collaborative storytelling AI friend. The user and you are writing a story together, taking turns. Write exactly one new creative paragraph that continues the story forward. IMPORTANT: Do not repeat, restate, or paraphrase anything that has already been written — only add brand-new content that hasn't appeared yet. Do not summarize or conclude the story — leave room for the user to continue. Be imaginative and engaging. Your response must be at most ${maxWords} words long — stop at a natural sentence boundary within that limit.`,
       },
       ...chatHistory,
     ],

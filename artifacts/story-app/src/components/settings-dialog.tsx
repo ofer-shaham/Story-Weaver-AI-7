@@ -82,22 +82,22 @@ export function SettingsDialog({ settings, onSave }: SettingsDialogProps) {
             <div className="flex justify-between items-center">
               <Label htmlFor="maxTokens">Response Length</Label>
               <span className="text-sm tabular-nums text-muted-foreground">
-                ~{Math.round(local.maxTokens * 0.75)} words
+                {local.maxTokens} {local.maxTokens === 1 ? "word" : "words"}
               </span>
             </div>
             <Slider
               id="maxTokens"
               data-testid="slider-max-tokens"
-              min={50}
-              max={1000}
-              step={25}
+              min={1}
+              max={20}
+              step={1}
               value={[local.maxTokens]}
               onValueChange={([v]) => setLocal((p) => ({ ...p, maxTokens: v }))}
               className="w-full"
             />
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>~37 words</span>
-              <span>~750 words</span>
+              <span>1 word</span>
+              <span>20 words</span>
             </div>
           </div>
 
