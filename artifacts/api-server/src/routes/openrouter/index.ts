@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { db, conversations as conversationsTable, messages as messagesTable } from "@workspace/db";
 import {
   CreateOpenrouterConversationBody,
@@ -14,15 +16,52 @@ import {
 import { openrouter } from "@workspace/integrations-openrouter-ai";
 import OpenAI from "openai";
 
+interface AppConfig {
+  openrouter?: {
+    apiKey?: string;
+    apiUrl?: string;
+    model?: string;
+  };
+}
+
+function loadConfig(): AppConfig {
+  try {
+    const raw = readFileSync(join(process.cwd(), "config.json"), "utf-8");
+    return JSON.parse(raw) as AppConfig;
+  } catch {
+    return {};
+  }
+}
+
+const config = loadConfig();
+
+const DEFAULT_MODEL =
+  config.openrouter?.model?.trim() ||
+  process.env.OPENROUTER_MODEL ||
+  "openrouter/auto";
+
 const router: IRouter = Router();
 
-const DEFAULT_MODEL = "openrouter/auto";
-
 function getClient(apiKey?: string | null, apiUrl?: string | null): OpenAI {
-  if (apiKey || apiUrl) {
+  const resolvedKey =
+    apiKey?.trim() ||
+    config.openrouter?.apiKey?.trim() ||
+    process.env.AI_INTEGRATIONS_OPENROUTER_API_KEY;
+
+  const resolvedUrl =
+    apiUrl?.trim() ||
+    config.openrouter?.apiUrl?.trim() ||
+    process.env.AI_INTEGRATIONS_OPENROUTER_BASE_URL;
+
+  if (
+    apiKey?.trim() ||
+    apiUrl?.trim() ||
+    config.openrouter?.apiKey?.trim() ||
+    config.openrouter?.apiUrl?.trim()
+  ) {
     return new OpenAI({
-      baseURL: apiUrl ?? process.env.AI_INTEGRATIONS_OPENROUTER_BASE_URL,
-      apiKey: apiKey ?? process.env.AI_INTEGRATIONS_OPENROUTER_API_KEY ?? "dummy",
+      baseURL: resolvedUrl ?? process.env.AI_INTEGRATIONS_OPENROUTER_BASE_URL,
+      apiKey: resolvedKey ?? "dummy",
     });
   }
   return openrouter;
@@ -157,43 +196,49 @@ router.post("/openrouter/conversations/:id/messages", async (req, res): Promise<
   let fullResponse = "";
 
   const client = getClient(apiKey, apiUrl);
-
+  const effectiveModel = model?.trim() || DEFAULT_MODEL;
   const maxWords = maxTokens ?? 10;
   const effectiveMaxTokens = Math.ceil(maxWords / 0.75);
 
-  const stream = await client.chat.completions.create({
-    model: model ?? DEFAULT_MODEL,
-    max_tokens: effectiveMaxTokens,
-    temperature: temperature ?? undefined,
-    messages: [
-      {
-        role: "system",
-        content:
-          `You are a collaborative storytelling AI friend. The user and you are writing a story together, taking turns. Write exactly one new creative paragraph that continues the story forward. IMPORTANT: Do not repeat, restate, or paraphrase anything that has already been written — only add brand-new content that hasn't appeared yet. Do not summarize or conclude the story — leave room for the user to continue. Be imaginative and engaging. Your response must be at most ${maxWords} words long — stop at a natural sentence boundary within that limit.`,
-      },
-      ...chatHistory,
-    ],
-    stream: true,
-  });
-
-  for await (const chunk of stream) {
-    const content = chunk.choices[0]?.delta?.content;
-    if (content) {
-      fullResponse += content;
-      res.write(`data: ${JSON.stringify({ content })}\n\n`);
-    }
-  }
-
-  if (fullResponse.trim()) {
-    await db.insert(messagesTable).values({
-      conversationId,
-      role: "assistant",
-      content: fullResponse,
+  try {
+    const stream = await client.chat.completions.create({
+      model: effectiveModel,
+      max_tokens: effectiveMaxTokens,
+      temperature: temperature ?? undefined,
+      messages: [
+        {
+          role: "system",
+          content:
+            `You are a collaborative storytelling AI friend. The user and you are writing a story together, taking turns. Write exactly one new creative paragraph that continues the story forward. IMPORTANT: Do not repeat, restate, or paraphrase anything that has already been written — only add brand-new content that hasn't appeared yet. Do not summarize or conclude the story — leave room for the user to continue. Be imaginative and engaging. Your response must be at most ${maxWords} words long — stop at a natural sentence boundary within that limit.`,
+        },
+        ...chatHistory,
+      ],
+      stream: true,
     });
-  }
 
-  res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-  res.end();
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content;
+      if (content) {
+        fullResponse += content;
+        res.write(`data: ${JSON.stringify({ content })}\n\n`);
+      }
+    }
+
+    if (fullResponse.trim()) {
+      await db.insert(messagesTable).values({
+        conversationId,
+        role: "assistant",
+        content: fullResponse,
+      });
+    }
+
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.end();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "AI completion failed";
+    res.write(`data: ${JSON.stringify({ error: message, done: true })}\n\n`);
+    res.end();
+  }
 });
 
 router.patch("/openrouter/messages/:messageId", async (req, res): Promise<void> => {
@@ -204,7 +249,7 @@ router.patch("/openrouter/messages/:messageId", async (req, res): Promise<void> 
   }
   const body = UpdateOpenrouterMessageBody.safeParse(req.body);
   if (!body.success) {
-    res.status(400).json({ error: body.error.message });
+    res.status(400).json({ error: body.data });
     return;
   }
   const [updated] = await db

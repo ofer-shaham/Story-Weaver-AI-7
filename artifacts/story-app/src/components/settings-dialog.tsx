@@ -60,6 +60,7 @@ export function SettingsDialog({ settings, onSave }: SettingsDialogProps) {
         </DialogHeader>
 
         <div className="space-y-5 py-2">
+          {/* Blind Mode */}
           <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background px-4 py-3">
             <div>
               <Label htmlFor="blindMode" className="text-sm font-medium cursor-pointer">
@@ -73,6 +74,25 @@ export function SettingsDialog({ settings, onSave }: SettingsDialogProps) {
               id="blindMode"
               checked={local.blindMode}
               onCheckedChange={(v) => setLocal((p) => ({ ...p, blindMode: v }))}
+            />
+          </div>
+
+          {/* Play user transcription — only relevant in blind mode */}
+          <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background px-4 py-3">
+            <div>
+              <Label htmlFor="playUserTranscription" className="text-sm font-medium cursor-pointer">
+                Play Back Your Words
+              </Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                In Blind Mode, read your transcribed paragraph aloud before sending.
+              </p>
+            </div>
+            <Switch
+              id="playUserTranscription"
+              checked={local.playUserTranscription}
+              onCheckedChange={(v) =>
+                setLocal((p) => ({ ...p, playUserTranscription: v }))
+              }
             />
           </div>
 

@@ -56,44 +56,75 @@ export function useVoice(enabled: boolean) {
     setState("idle");
   }, []);
 
-  /** One-shot listen: resolves with the transcript (empty string on silence/error). */
-  const listenOnce = useCallback((): Promise<string> => {
-    return new Promise((resolve) => {
-      if (!enabled) {
-        resolve("");
-        return;
-      }
+  /**
+   * One-shot listen: resolves with transcript after `silenceMs` of silence
+   * (default 4000 ms). Uses continuous mode so it accumulates the full reply.
+   */
+  const listenOnce = useCallback(
+    (silenceMs = 4000): Promise<string> => {
+      return new Promise((resolve) => {
+        if (!enabled) {
+          resolve("");
+          return;
+        }
 
-      const Ctor = getSpeechRecognition();
-      if (!Ctor) {
-        resolve("");
-        return;
-      }
+        const Ctor = getSpeechRecognition();
+        if (!Ctor) {
+          resolve("");
+          return;
+        }
 
-      const recognition = new Ctor();
-      recognitionRef.current = recognition;
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = "en-US";
+        const recognition = new Ctor();
+        recognitionRef.current = recognition;
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "en-US";
 
-      let transcript = "";
+        let transcript = "";
+        let silenceTimer: ReturnType<typeof setTimeout> | null = null;
 
-      recognition.onstart = () => setState("listening");
-      recognition.onresult = (e) => {
-        transcript = e.results[0]?.[0]?.transcript ?? "";
-      };
-      recognition.onend = () => {
-        setState("idle");
-        resolve(transcript);
-      };
-      recognition.onerror = () => {
-        setState("idle");
-        resolve("");
-      };
+        const resetSilenceTimer = () => {
+          if (silenceTimer) clearTimeout(silenceTimer);
+          silenceTimer = setTimeout(() => {
+            recognition.stop();
+          }, silenceMs);
+        };
 
-      recognition.start();
-    });
-  }, [enabled]);
+        recognition.onstart = () => {
+          setState("listening");
+          resetSilenceTimer();
+        };
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        recognition.onresult = (e: any) => {
+          let interim = "";
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) {
+              transcript += e.results[i][0].transcript + " ";
+            } else {
+              interim += e.results[i][0].transcript;
+            }
+          }
+          if (transcript || interim) resetSilenceTimer();
+        };
+
+        recognition.onend = () => {
+          if (silenceTimer) clearTimeout(silenceTimer);
+          setState("idle");
+          resolve(transcript.trim());
+        };
+
+        recognition.onerror = () => {
+          if (silenceTimer) clearTimeout(silenceTimer);
+          setState("idle");
+          resolve(transcript.trim());
+        };
+
+        recognition.start();
+      });
+    },
+    [enabled]
+  );
 
   /** Manual listen with streaming interim results (used outside of blind auto-loop). */
   const listen = useCallback(
@@ -113,7 +144,8 @@ export function useVoice(enabled: boolean) {
       recognition.lang = "en-US";
 
       recognition.onstart = () => setState("listening");
-      recognition.onresult = (e) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recognition.onresult = (e: any) => {
         const t = e.results[0]?.[0]?.transcript ?? "";
         onResult(t);
       };

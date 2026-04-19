@@ -7,6 +7,7 @@ export interface StorySettings {
   apiKey: string;
   apiUrl: string;
   blindMode: boolean;
+  playUserTranscription: boolean;
 }
 
 const STORAGE_KEY = "story-together-settings";
@@ -18,6 +19,7 @@ const DEFAULTS: StorySettings = {
   apiKey: "",
   apiUrl: "",
   blindMode: false,
+  playUserTranscription: true,
 };
 
 function load(): StorySettings {

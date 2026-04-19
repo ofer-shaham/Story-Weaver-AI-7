@@ -10,6 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useStoryStream } from "@/hooks/use-story-stream";
 import { useSettings } from "@/hooks/use-settings";
 import { useVoice } from "@/hooks/use-voice";
+import { useSounds } from "@/hooks/use-sounds";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +24,7 @@ import {
   X,
   Volume2,
   Mic,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -39,13 +41,14 @@ export default function Story() {
   const { data: messages, isLoading: isLoadingMsgs } =
     useListOpenrouterMessages(id, { query: { enabled: !!id } });
 
-  const { sendMessage, isTyping, streamedContent } = useStoryStream(
+  const { sendMessage, isTyping, streamedContent, streamError, clearError } = useStoryStream(
     id,
     settings
   );
   const updateMessage = useUpdateOpenrouterMessage();
 
   const voice = useVoice(settings.blindMode);
+  const { playSound } = useSounds();
 
   // Inline editing
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -66,14 +69,26 @@ export default function Story() {
   const blindLoopRunningRef = useRef(false);
   // Allows the in-flight loop to detect blind-mode toggle-off
   const blindModeEnabledRef = useRef(settings.blindMode);
+  // Track if we already played the error sound this error cycle
+  const errorSoundPlayedRef = useRef(false);
 
   useEffect(() => {
     blindModeEnabledRef.current = settings.blindMode;
     if (!settings.blindMode) {
       voice.stopSpeaking();
-      // STT will time out / resolve on its own
     }
   }, [settings.blindMode, voice]);
+
+  // Play error sound once when a stream error occurs
+  useEffect(() => {
+    if (streamError && !errorSoundPlayedRef.current) {
+      errorSoundPlayedRef.current = true;
+      playSound("error");
+    }
+    if (!streamError) {
+      errorSoundPlayedRef.current = false;
+    }
+  }, [streamError, playSound]);
 
   // Auto-scroll whenever content changes
   useEffect(() => {
@@ -83,13 +98,12 @@ export default function Story() {
   // --- Blind mode auto-loop ---
   useEffect(() => {
     if (!settings.blindMode) return;
-    if (isTyping) return; // AI is still writing — wait
-    if (blindLoopRunningRef.current) return; // loop already in flight
-    if (!messages) return; // data not yet loaded
+    if (isTyping) return;
+    if (blindLoopRunningRef.current) return;
+    if (!messages) return;
 
     const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
 
-    // Already handled this AI turn
     if (
       lastMsg?.role === "assistant" &&
       lastHandledMsgIdRef.current === lastMsg.id
@@ -109,24 +123,31 @@ export default function Story() {
 
         if (!blindModeEnabledRef.current) return;
 
-        // 2. Keep listening until the user says something
+        // 2. Listen until user finishes speaking (4-second silence)
         let transcript = "";
         while (!transcript.trim()) {
           if (!blindModeEnabledRef.current) return;
           setBlindStatus("Listening… speak your paragraph.");
-          transcript = await voice.listenOnce();
+          transcript = await voice.listenOnce(4000);
 
           if (!blindModeEnabledRef.current) return;
 
           if (!transcript.trim()) {
-            // Nothing heard — briefly announce and retry
-            setBlindStatus("Didn't catch that. Listening again…");
-            await voice.speak("I didn't catch that. Please speak your paragraph.");
-            if (!blindModeEnabledRef.current) return;
+            // Play a subtle sound to indicate no input was detected, then retry silently
+            playSound("error");
+            setBlindStatus("No input detected. Listening again…");
           }
         }
 
-        // 3. Show what was heard and auto-submit
+        // 3. Play back what was heard (if option enabled)
+        if (settings.playUserTranscription) {
+          setBlindStatus("Playing back your paragraph…");
+          await voice.speak(transcript.trim());
+          if (!blindModeEnabledRef.current) return;
+        }
+
+        // 4. Play STT complete sound and submit
+        playSound("stt-complete");
         setDraft(transcript.trim());
         setBlindStatus("Sending your paragraph…");
         await sendMessage(transcript.trim());
@@ -138,7 +159,7 @@ export default function Story() {
     }
 
     runLoop();
-  }, [messages, isTyping, settings.blindMode, voice, sendMessage]);
+  }, [messages, isTyping, settings.blindMode, settings.playUserTranscription, voice, sendMessage, playSound]);
 
   // Inline edit handlers
   const startEdit = (msgId: number, content: string) => {
@@ -163,6 +184,21 @@ export default function Story() {
     setEditingId(null);
     setEditDraft("");
   };
+
+  // Normal mode voice send
+  const handleVoiceSend = useCallback(() => {
+    if (isTyping) return;
+    const stop = voice.listen(
+      (transcript) => {
+        setDraft(transcript);
+      },
+      async () => {
+        // STT ended — play completion sound
+        playSound("stt-complete");
+      }
+    );
+    return stop;
+  }, [isTyping, voice, playSound]);
 
   // Normal mode send
   const handleSend = useCallback(async () => {
@@ -209,9 +245,23 @@ export default function Story() {
   const isListening = voice.state === "listening";
 
   return (
-    <div className="max-w-3xl mx-auto min-h-screen flex flex-col bg-background">
+    <div
+      className={cn(
+        "max-w-3xl mx-auto min-h-screen flex flex-col transition-colors duration-700",
+        isListening
+          ? "bg-blue-950/10 dark:bg-blue-900/20"
+          : "bg-background"
+      )}
+    >
       {/* Header */}
-      <header className="py-6 px-6 md:px-8 border-b border-border/40 sticky top-0 bg-background/95 backdrop-blur-sm z-10 flex items-center justify-between">
+      <header
+        className={cn(
+          "py-6 px-6 md:px-8 border-b border-border/40 sticky top-0 backdrop-blur-sm z-10 flex items-center justify-between transition-colors duration-700",
+          isListening
+            ? "bg-blue-950/10 dark:bg-blue-900/20"
+            : "bg-background/95"
+        )}
+      >
         <div className="flex items-center gap-4 overflow-hidden">
           <Link href="/">
             <Button
@@ -227,6 +277,12 @@ export default function Story() {
           </h1>
         </div>
         <div className="flex items-center gap-1">
+          {isListening && (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-blue-500/15 border border-blue-400/30">
+              <Mic className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+              <span className="text-xs text-blue-400 font-sans font-medium">Listening</span>
+            </div>
+          )}
           {settings.blindMode && isSpeaking && (
             <Button
               variant="ghost"
@@ -241,6 +297,21 @@ export default function Story() {
           <SettingsDialog settings={settings} onSave={updateSettings} />
         </div>
       </header>
+
+      {/* Error banner */}
+      {streamError && (
+        <div className="mx-6 mt-4 flex items-start gap-3 px-4 py-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive font-sans text-sm">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span className="flex-1">{streamError}</span>
+          <button
+            onClick={clearError}
+            className="shrink-0 hover:opacity-70 transition-opacity"
+            aria-label="Dismiss error"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Story Content */}
       <div
@@ -350,15 +421,13 @@ export default function Story() {
       {/* Bottom bar */}
       <div className="p-4 md:p-6 border-t border-border/40 bg-card rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.02)]">
         {settings.blindMode ? (
-          /* --- Blind mode: fully automatic, no touch needed --- */
           <div className="space-y-3">
-            {/* Live voice indicator */}
             <div className="flex items-center justify-center gap-3 py-2">
               {isSpeaking && (
                 <Volume2 className="w-5 h-5 text-primary animate-pulse shrink-0" />
               )}
               {isListening && (
-                <Mic className="w-5 h-5 text-destructive animate-pulse shrink-0" />
+                <Mic className="w-5 h-5 text-blue-400 animate-pulse shrink-0" />
               )}
               <p className="text-center text-sm font-sans text-muted-foreground italic">
                 {isTyping
@@ -371,7 +440,6 @@ export default function Story() {
               </p>
             </div>
 
-            {/* Transcript preview (so a sighted helper can see what was heard) */}
             {draft && (
               <div className="px-4 py-3 rounded-lg bg-background/70 border border-border/40 font-serif text-base leading-relaxed text-primary/80">
                 {draft}
@@ -379,7 +447,6 @@ export default function Story() {
             )}
           </div>
         ) : (
-          /* --- Normal text composer --- */
           <div className="relative">
             <Textarea
               value={draft}
@@ -391,16 +458,33 @@ export default function Story() {
                   : "Write your next paragraph… (Cmd+Enter to send)"
               }
               disabled={isTyping}
-              className="min-h-[120px] resize-none pr-16 font-serif text-lg leading-relaxed bg-background/50 border-border/50 focus-visible:ring-primary/50 placeholder:italic placeholder:font-serif"
+              className="min-h-[120px] resize-none pr-24 font-serif text-lg leading-relaxed bg-background/50 border-border/50 focus-visible:ring-primary/50 placeholder:italic placeholder:font-serif"
             />
-            <Button
-              size="icon"
-              onClick={handleSend}
-              disabled={!draft.trim() || isTyping}
-              className="absolute bottom-4 right-4 h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm transition-all"
-            >
-              <Send className="w-4 h-4 ml-0.5" />
-            </Button>
+            <div className="absolute bottom-4 right-4 flex gap-2">
+              <Button
+                size="icon"
+                variant="outline"
+                onClick={handleVoiceSend}
+                disabled={isTyping || isListening}
+                className={cn(
+                  "h-10 w-10 rounded-full transition-all",
+                  isListening
+                    ? "bg-blue-500/20 border-blue-400/50 text-blue-400 animate-pulse"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                aria-label="Dictate"
+              >
+                <Mic className="w-4 h-4" />
+              </Button>
+              <Button
+                size="icon"
+                onClick={handleSend}
+                disabled={!draft.trim() || isTyping}
+                className="h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm transition-all"
+              >
+                <Send className="w-4 h-4 ml-0.5" />
+              </Button>
+            </div>
           </div>
         )}
       </div>

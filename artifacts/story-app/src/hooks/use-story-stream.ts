@@ -6,12 +6,14 @@ import { type StorySettings } from "@/hooks/use-settings";
 export function useStoryStream(conversationId: number, settings?: StorySettings) {
   const [isTyping, setIsTyping] = useState(false);
   const [streamedContent, setStreamedContent] = useState("");
+  const [streamError, setStreamError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const sendMessage = useCallback(
     async (content: string) => {
       setIsTyping(true);
       setStreamedContent("");
+      setStreamError(null);
 
       try {
         const body: Record<string, unknown> = { content };
@@ -30,7 +32,7 @@ export function useStoryStream(conversationId: number, settings?: StorySettings)
         });
 
         if (!response.ok) {
-          throw new Error("Failed to send message");
+          throw new Error(`Server error ${response.status}: ${response.statusText}`);
         }
 
         if (!response.body) {
@@ -59,15 +61,21 @@ export function useStoryStream(conversationId: number, settings?: StorySettings)
                   if (data.done) {
                     done = true;
                   }
-                } catch {
-                  // ignore malformed chunks
+                  if (data.error) {
+                    throw new Error(data.error);
+                  }
+                } catch (parseErr) {
+                  if (parseErr instanceof SyntaxError) continue;
+                  throw parseErr;
                 }
               }
             }
           }
         }
       } catch (error) {
+        const msg = error instanceof Error ? error.message : "Unknown error";
         console.error("Error streaming message:", error);
+        setStreamError(msg);
       } finally {
         setIsTyping(false);
         setStreamedContent("");
@@ -79,5 +87,7 @@ export function useStoryStream(conversationId: number, settings?: StorySettings)
     [conversationId, queryClient, settings]
   );
 
-  return { sendMessage, isTyping, streamedContent };
+  const clearError = useCallback(() => setStreamError(null), []);
+
+  return { sendMessage, isTyping, streamedContent, streamError, clearError };
 }
