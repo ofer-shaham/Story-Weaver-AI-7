@@ -271,10 +271,20 @@ try {
   const chatRes = await apiPost("/chat/completions", {
     model,
     max_tokens: 16,
+
+
+
+    //no streaming
+    stream: false,
     messages: [{ role: "user", content: 'Reply with exactly the word "ok".' }],
   });
-
   if (chatRes.ok) {
+    console.log(JSON.stringify(chatRes.body, null, 2)); // full response, pretty-printed
+    console.log(chatRes.body.choices[0].message.content); // just the text
+    console.log('__________==')
+    console.log(chatRes);
+    console.log(chatRes.body?.choices[0].message.content);
+
     const reply = chatRes.body?.choices?.[0]?.message?.content?.trim() ?? "";
     const usedModel = chatRes.body?.model ?? model;
     ok("Chat completion succeeded", `routed to: ${usedModel}`);
