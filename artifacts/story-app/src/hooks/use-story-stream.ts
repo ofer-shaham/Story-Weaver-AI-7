@@ -3,6 +3,36 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getListOpenrouterMessagesQueryKey } from "@workspace/api-client-react";
 import { type StorySettings } from "@/hooks/use-settings";
 
+export interface DebugEntry {
+  id: number;
+  at: string;
+  endpoint: string;
+  method: string;
+  status: number | null;
+  request: unknown;
+  response: unknown;
+  durationMs: number;
+}
+
+let debugIdCounter = 0;
+let debugListeners: Array<(entry: DebugEntry) => void> = [];
+
+export function subscribeDebug(fn: (entry: DebugEntry) => void): () => void {
+  debugListeners.push(fn);
+  return () => {
+    debugListeners = debugListeners.filter((l) => l !== fn);
+  };
+}
+
+function emitDebug(entry: Omit<DebugEntry, "id" | "at">): void {
+  const full: DebugEntry = {
+    ...entry,
+    id: ++debugIdCounter,
+    at: new Date().toISOString(),
+  };
+  for (const fn of debugListeners) fn(full);
+}
+
 function buildOptionsBody(settings?: StorySettings): Record<string, unknown> {
   const body: Record<string, unknown> = {};
   if (!settings) return body;
@@ -16,7 +46,7 @@ function buildOptionsBody(settings?: StorySettings): Record<string, unknown> {
 
 export function useStoryStream(conversationId: number, settings?: StorySettings) {
   const [isTyping, setIsTyping] = useState(false);
-  const [streamedContent, setStreamedContent] = useState("");
+  const [streamedContent] = useState("");
   const [streamError, setStreamError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -29,28 +59,41 @@ export function useStoryStream(conversationId: number, settings?: StorySettings)
   const submitUserMessage = useCallback(
     async (content: string): Promise<boolean> => {
       setStreamError(null);
+      const endpoint = `/api/openrouter/conversations/${conversationId}/messages`;
+      const requestBody = { content, skipAiCompletion: true };
+      const start = performance.now();
+      let status: number | null = null;
+      let responseJson: unknown = null;
       try {
-        const body = { content, skipAiCompletion: true };
-        const response = await fetch(
-          `/api/openrouter/conversations/${conversationId}/messages`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          },
-        );
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+        status = response.status;
+        responseJson = await response.json().catch(() => null);
         if (!response.ok) {
-          throw new Error(
-            `Server error ${response.status}: ${response.statusText}`,
-          );
+          const msg =
+            (responseJson as { error?: string } | null)?.error ??
+            `Server error ${response.status}: ${response.statusText}`;
+          throw new Error(msg);
         }
         invalidate();
         return true;
       } catch (error) {
         const msg = error instanceof Error ? error.message : "Unknown error";
         console.error("Error submitting user message:", error);
-        setStreamError(msg);
+        setStreamError(`[${status ?? "ERR"}] ${msg}`);
         return false;
+      } finally {
+        emitDebug({
+          endpoint,
+          method: "POST",
+          status,
+          request: requestBody,
+          response: responseJson,
+          durationMs: Math.round(performance.now() - start),
+        });
       }
     },
     [conversationId, invalidate],
@@ -58,75 +101,49 @@ export function useStoryStream(conversationId: number, settings?: StorySettings)
 
   const requestAiTurn = useCallback(async (): Promise<boolean> => {
     setIsTyping(true);
-    setStreamedContent("");
     setStreamError(null);
 
+    const endpoint = `/api/openrouter/conversations/${conversationId}/ai-turn`;
+    const requestBody = buildOptionsBody(settings);
+    const start = performance.now();
+    let status: number | null = null;
+    let responseJson: unknown = null;
+
     try {
-      const response = await fetch(
-        `/api/openrouter/conversations/${conversationId}/ai-turn`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildOptionsBody(settings)),
-        },
-      );
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      status = response.status;
+      responseJson = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(
-          `Server error ${response.status}: ${response.statusText}`,
-        );
-      }
-      if (!response.body) throw new Error("No response body");
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let aiError: string | null = null;
-
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
-        if (!value) continue;
-
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
-        for (const line of lines) {
-          if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
-          try {
-            const data = JSON.parse(line.slice(6));
-            if (data.content) {
-              setStreamedContent((prev) => prev + data.content);
-            }
-            if (data.error) {
-              const status = data.status ? `${data.status} ` : "";
-              aiError = `${status}${data.error}`;
-            }
-            if (data.done) done = true;
-          } catch (parseErr) {
-            if (parseErr instanceof SyntaxError) continue;
-            throw parseErr;
-          }
-        }
-      }
-
-      if (aiError) {
-        setStreamError(aiError);
-        return false;
+        const msg =
+          (responseJson as { error?: string } | null)?.error ??
+          `Server error ${response.status}: ${response.statusText}`;
+        throw new Error(msg);
       }
       return true;
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Unknown error";
       console.error("Error requesting AI turn:", error);
-      setStreamError(msg);
+      setStreamError(`[${status ?? "ERR"}] ${msg}`);
       return false;
     } finally {
       setIsTyping(false);
-      setStreamedContent("");
       invalidate();
+      emitDebug({
+        endpoint,
+        method: "POST",
+        status,
+        request: requestBody,
+        response: responseJson,
+        durationMs: Math.round(performance.now() - start),
+      });
     }
   }, [conversationId, settings, invalidate]);
 
-  // Convenience: submit user message, then (optionally) request AI turn.
   const sendMessage = useCallback(
     async (content: string, options: { autoAiTurn?: boolean } = {}): Promise<void> => {
       const ok = await submitUserMessage(content);

@@ -319,45 +319,49 @@ router.post(
     const maxWords = maxTokens ?? 10;
     const effectiveMaxTokens = Math.ceil(maxWords / 0.75);
 
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
-    let fullResponse = "";
+    const requestPayload = {
+      model: effectiveModel,
+      max_tokens: effectiveMaxTokens,
+      temperature: temperature ?? undefined,
+      messages: [
+        {
+          role: "system" as const,
+          content: `You are a collaborative storytelling AI friend. The user and you are writing a story together, taking turns. Write exactly one new creative paragraph that continues the story forward. IMPORTANT: Do not repeat, restate, or paraphrase anything that has already been written — only add brand-new content that hasn't appeared yet. Do not summarize or conclude the story — leave room for the user to continue. Be imaginative and engaging. Your response must be at most ${maxWords} words long — stop at a natural sentence boundary within that limit.`,
+        },
+        ...chatHistory,
+      ],
+    };
 
     try {
-      const stream = await client.chat.completions.create({
-        model: effectiveModel,
-        max_tokens: effectiveMaxTokens,
-        temperature: temperature ?? undefined,
-        messages: [
-          {
-            role: "system",
-            content: `You are a collaborative storytelling AI friend. The user and you are writing a story together, taking turns. Write exactly one new creative paragraph that continues the story forward. IMPORTANT: Do not repeat, restate, or paraphrase anything that has already been written — only add brand-new content that hasn't appeared yet. Do not summarize or conclude the story — leave room for the user to continue. Be imaginative and engaging. Your response must be at most ${maxWords} words long — stop at a natural sentence boundary within that limit.`,
-          },
-          ...chatHistory,
-        ],
-        stream: true,
+      const completion = await client.chat.completions.create({
+        ...requestPayload,
+        stream: false,
       });
 
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content;
-        if (content) {
-          fullResponse += content;
-          res.write(`data: ${JSON.stringify({ content })}\n\n`);
-        }
+      const content = completion.choices[0]?.message?.content?.trim() ?? "";
+      if (!content) {
+        res.status(502).json({
+          error: "AI returned an empty response",
+          request: requestPayload,
+          response: completion,
+        });
+        return;
       }
 
-      if (fullResponse.trim()) {
-        await db.insert(messagesTable).values({
+      const [inserted] = await db
+        .insert(messagesTable)
+        .values({
           conversationId,
           role: "assistant",
-          content: fullResponse,
-        });
-      }
+          content,
+        })
+        .returning();
 
-      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-      res.end();
+      res.status(200).json({
+        message: inserted,
+        request: requestPayload,
+        response: completion,
+      });
     } catch (err) {
       const status =
         err instanceof OpenAI.APIError && typeof err.status === "number"
@@ -365,11 +369,16 @@ router.post(
           : 500;
       const message =
         err instanceof Error ? err.message : "AI completion failed";
+      const responseBody =
+        err instanceof OpenAI.APIError
+          ? { status: err.status, headers: err.headers, body: (err as { error?: unknown }).error }
+          : { message };
       logger.error({ err, status }, "openrouter ai-turn failed");
-      res.write(
-        `data: ${JSON.stringify({ error: message, status, done: true })}\n\n`,
-      );
-      res.end();
+      res.status(status).json({
+        error: message,
+        request: requestPayload,
+        response: responseBody,
+      });
     }
   },
 );

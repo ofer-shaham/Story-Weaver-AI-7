@@ -12,6 +12,7 @@ import { useSettings } from "@/hooks/use-settings";
 import { useVoice } from "@/hooks/use-voice";
 import { useSounds } from "@/hooks/use-sounds";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { DebugPanel } from "@/components/debug-panel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -348,6 +349,15 @@ export default function Story() {
               <Volume2 className="w-5 h-5" />
             </Button>
           )}
+          {settings.gameMode === "manual" && (
+            <span
+              className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/15 border border-amber-400/30 text-amber-400 text-xs font-sans font-medium"
+              title="AI replies only when you press the AI turn button"
+            >
+              <Sparkles className="w-3 h-3" />
+              Manual
+            </span>
+          )}
           <SettingsDialog settings={settings} onSave={updateSettings} />
         </div>
       </header>
@@ -456,14 +466,15 @@ export default function Story() {
             </div>
           ))}
 
-        {/* Streaming AI response */}
+        {/* AI is composing (non-streaming) */}
         {isTyping && (
           <div className="relative text-foreground animate-in fade-in duration-300">
             <div className="absolute -left-8 top-1.5 opacity-40 text-secondary-foreground">
-              <Sparkles className="w-4 h-4" />
+              <Sparkles className="w-4 h-4 animate-pulse" />
             </div>
-            <div className="whitespace-pre-wrap">
-              {streamedContent}
+            <div className="italic text-muted-foreground">
+              Your co-author is writing
+              {streamedContent ? `… ${streamedContent}` : "…"}
               <span className="inline-block w-1.5 h-5 ml-1 align-middle bg-primary/50 animate-pulse"></span>
             </div>
           </div>
@@ -544,21 +555,22 @@ export default function Story() {
               </Button>
               {settings.gameMode === "manual" && (
                 <Button
-                  size="icon"
-                  variant="secondary"
                   onClick={handleRequestAi}
                   disabled={!aiTurnAvailable}
-                  className="h-10 w-10 rounded-full shadow-sm transition-all"
+                  className="h-10 px-4 rounded-full bg-amber-500 hover:bg-amber-500/90 text-amber-950 font-sans font-medium shadow-sm transition-all gap-2"
                   aria-label="Request AI turn"
-                  title="Request AI turn"
+                  title="Ask the AI to write the next paragraph"
                 >
                   <Sparkles className="w-4 h-4" />
+                  AI turn
                 </Button>
               )}
             </div>
           </div>
         )}
       </div>
+
+      <DebugPanel />
     </div>
   );
 }
