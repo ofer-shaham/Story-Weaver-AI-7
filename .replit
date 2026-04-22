@@ -98,3 +98,4 @@ externalPort = 3001
 
 [nix]
 packages = ["vim"]
+channel = "stable-25_05"

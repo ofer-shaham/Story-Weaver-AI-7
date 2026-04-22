@@ -48,7 +48,7 @@ export function SettingsDialog({ settings, onSave }: SettingsDialogProps) {
           <Settings className="w-5 h-5" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[460px] font-sans bg-card border-card-border">
+      <DialogContent className="font-sans bg-card border-card-border w-[calc(100vw-2rem)] max-w-[460px] sm:max-w-[460px] max-h-[calc(100vh-2rem)] sm:max-h-[85vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="font-serif text-xl text-primary">
             AI Settings

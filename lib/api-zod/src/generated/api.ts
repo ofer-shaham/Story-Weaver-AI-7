@@ -83,6 +83,13 @@ export const UpdateOpenrouterMessageResponse = zod.object({
 });
 
 /**
+ * @summary Delete an existing message
+ */
+export const DeleteOpenrouterMessageParams = zod.object({
+  messageId: zod.coerce.number(),
+});
+
+/**
  * @summary Generate a single AI completion (non-streaming)
  */
 export const CreateOpenrouterCompletionBody = zod.object({

@@ -4,6 +4,8 @@ import {
   useGetOpenrouterConversation,
   useListOpenrouterMessages,
   useUpdateOpenrouterMessage,
+  useDeleteOpenrouterMessage,
+  getGetOpenrouterConversationQueryKey,
   getListOpenrouterMessagesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,6 +14,7 @@ import { useSettings } from "@/hooks/use-settings";
 import { useVoice } from "@/hooks/use-voice";
 import { useSounds } from "@/hooks/use-sounds";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { DebugPanel } from "@/components/debug-panel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +29,7 @@ import {
   Volume2,
   Mic,
   AlertCircle,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -37,10 +41,20 @@ export default function Story() {
   const queryClient = useQueryClient();
 
   const { data: conversation, isLoading: isLoadingConv } =
-    useGetOpenrouterConversation(id, { query: { enabled: !!id } });
+    useGetOpenrouterConversation(id, {
+      query: {
+        enabled: !!id,
+        queryKey: getGetOpenrouterConversationQueryKey(id),
+      },
+    });
 
   const { data: messages, isLoading: isLoadingMsgs } =
-    useListOpenrouterMessages(id, { query: { enabled: !!id } });
+    useListOpenrouterMessages(id, {
+      query: {
+        enabled: !!id,
+        queryKey: getListOpenrouterMessagesQueryKey(id),
+      },
+    });
 
   const {
     submitUserMessage,
@@ -52,6 +66,7 @@ export default function Story() {
     clearError,
   } = useStoryStream(id, settings);
   const updateMessage = useUpdateOpenrouterMessage();
+  const deleteMessage = useDeleteOpenrouterMessage();
 
   const voice = useVoice(settings.blindMode);
   const { playSound } = useSounds();
@@ -217,6 +232,14 @@ export default function Story() {
     setEditDraft("");
   };
 
+  const handleDeleteMessage = async (messageId: number) => {
+    if (!confirm("Delete this paragraph?")) return;
+    await deleteMessage.mutateAsync({ messageId });
+    queryClient.invalidateQueries({
+      queryKey: getListOpenrouterMessagesQueryKey(id),
+    });
+  };
+
   // Normal mode voice send
   const handleVoiceSend = useCallback(() => {
     if (isTyping) return;
@@ -252,13 +275,6 @@ export default function Story() {
       handleSend();
     }
   };
-
-  const lastMessage = messages && messages.length > 0 ? messages[messages.length - 1] : null;
-  const aiTurnAvailable =
-    !isTyping &&
-    !!lastMessage &&
-    lastMessage.role === "user" &&
-    lastMessage.content.trim() !== "";
 
   if (isLoadingConv || isLoadingMsgs) {
     return (
@@ -358,6 +374,7 @@ export default function Story() {
               Manual
             </span>
           )}
+          <ThemeToggle />
           <SettingsDialog settings={settings} onSave={updateSettings} />
         </div>
       </header>
@@ -454,13 +471,25 @@ export default function Story() {
               ) : (
                 <div className="relative">
                   <div className="whitespace-pre-wrap">{msg.content}</div>
-                  <button
-                    onClick={() => startEdit(msg.id, msg.content)}
-                    aria-label="Edit passage"
-                    className="absolute -right-8 top-0.5 opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity text-muted-foreground hover:text-primary p-1 rounded"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="absolute -right-8 top-0.5 flex flex-col gap-1 opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity">
+                    <button
+                      onClick={() => startEdit(msg.id, msg.content)}
+                      aria-label="Edit passage"
+                      data-testid={`button-edit-message-${msg.id}`}
+                      className="text-muted-foreground hover:text-primary p-1 rounded"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteMessage(msg.id)}
+                      disabled={deleteMessage.isPending}
+                      aria-label="Delete passage"
+                      data-testid={`button-delete-message-${msg.id}`}
+                      className="text-muted-foreground hover:text-destructive p-1 rounded disabled:opacity-30"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -556,7 +585,8 @@ export default function Story() {
               {settings.gameMode === "manual" && (
                 <Button
                   onClick={handleRequestAi}
-                  disabled={!aiTurnAvailable}
+                  disabled={isTyping}
+                  data-testid="button-ai-turn"
                   className="h-10 px-4 rounded-full bg-amber-500 hover:bg-amber-500/90 text-amber-950 font-sans font-medium shadow-sm transition-all gap-2"
                   aria-label="Request AI turn"
                   title="Ask the AI to write the next paragraph"

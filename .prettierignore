@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+.next
+.turbo
+coverage
+pnpm-lock.yaml
+**/dist/**
+**/node_modules/**
+**/generated/**
+**/.cache/**
+**/logs/**
+artifacts/*/public
+playwright-report
+test-results

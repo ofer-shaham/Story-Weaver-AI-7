@@ -332,54 +332,113 @@ router.post(
       ],
     };
 
-    try {
-      const completion = await client.chat.completions.create({
-        ...requestPayload,
-        stream: false,
-      });
+    const maxAttempts = Math.max(
+      1,
+      Number(process.env.AI_MAX_ATTEMPTS ?? "3"),
+    );
+    const attempts: Array<{
+      attempt: number;
+      durationMs: number;
+      success: boolean;
+      error?: { status?: number; message: string };
+      finishReason?: string | null;
+      empty?: boolean;
+    }> = [];
 
-      const content = completion.choices[0]?.message?.content?.trim() ?? "";
-      if (!content) {
-        res.status(502).json({
-          error: "AI returned an empty response",
-          request: requestPayload,
-          response: completion,
+    let lastError:
+      | { status: number; message: string; body?: unknown }
+      | null = null;
+    let successCompletion: OpenAI.Chat.Completions.ChatCompletion | null = null;
+    let successContent = "";
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const start = Date.now();
+      try {
+        const completion = await client.chat.completions.create({
+          ...requestPayload,
+          stream: false,
         });
-        return;
-      }
+        const content = completion.choices[0]?.message?.content?.trim() ?? "";
+        const finishReason = completion.choices[0]?.finish_reason ?? null;
 
+        if (!content) {
+          attempts.push({
+            attempt,
+            durationMs: Date.now() - start,
+            success: false,
+            empty: true,
+            finishReason,
+            error: { message: "AI returned an empty response" },
+          });
+          lastError = { status: 502, message: "AI returned an empty response" };
+          continue;
+        }
+
+        attempts.push({
+          attempt,
+          durationMs: Date.now() - start,
+          success: true,
+          finishReason,
+        });
+        successCompletion = completion;
+        successContent = content;
+        break;
+      } catch (err) {
+        const status =
+          err instanceof OpenAI.APIError && typeof err.status === "number"
+            ? err.status
+            : 500;
+        const message =
+          err instanceof Error ? err.message : "AI completion failed";
+        const body =
+          err instanceof OpenAI.APIError
+            ? (err as { error?: unknown }).error
+            : undefined;
+        attempts.push({
+          attempt,
+          durationMs: Date.now() - start,
+          success: false,
+          error: { status, message },
+        });
+        lastError = { status, message, body };
+        logger.warn(
+          { err, status, attempt, maxAttempts },
+          "openrouter ai-turn attempt failed",
+        );
+      }
+    }
+
+    if (successCompletion && successContent) {
       const [inserted] = await db
         .insert(messagesTable)
         .values({
           conversationId,
           role: "assistant",
-          content,
+          content: successContent,
         })
         .returning();
 
       res.status(200).json({
         message: inserted,
         request: requestPayload,
-        response: completion,
+        response: successCompletion,
+        attempts,
       });
-    } catch (err) {
-      const status =
-        err instanceof OpenAI.APIError && typeof err.status === "number"
-          ? err.status
-          : 500;
-      const message =
-        err instanceof Error ? err.message : "AI completion failed";
-      const responseBody =
-        err instanceof OpenAI.APIError
-          ? { status: err.status, headers: err.headers, body: (err as { error?: unknown }).error }
-          : { message };
-      logger.error({ err, status }, "openrouter ai-turn failed");
-      res.status(status).json({
-        error: message,
-        request: requestPayload,
-        response: responseBody,
-      });
+      return;
     }
+
+    const finalStatus = lastError?.status ?? 500;
+    const finalMessage = lastError?.message ?? "AI completion failed";
+    logger.error(
+      { status: finalStatus, attempts },
+      "openrouter ai-turn exhausted retries",
+    );
+    res.status(finalStatus).json({
+      error: finalMessage,
+      request: requestPayload,
+      response: lastError?.body ?? { message: finalMessage },
+      attempts,
+    });
   },
 );
 
@@ -396,16 +455,45 @@ router.patch(
       res.status(400).json({ error: body.data });
       return;
     }
-    const [updated] = await db
-      .update(messagesTable)
-      .set({ content: body.data.content })
-      .where(eq(messagesTable.id, params.data.messageId))
-      .returning();
-    if (!updated) {
+
+    const [existing] = await db
+      .select()
+      .from(messagesTable)
+      .where(eq(messagesTable.id, params.data.messageId));
+    if (!existing) {
       res.status(404).json({ error: "Message not found" });
       return;
     }
+
+    // After editing an AI (assistant) message, change owner to user.
+    const newRole = existing.role === "assistant" ? "user" : existing.role;
+
+    const [updated] = await db
+      .update(messagesTable)
+      .set({ content: body.data.content, role: newRole })
+      .where(eq(messagesTable.id, params.data.messageId))
+      .returning();
     res.json(updated);
+  },
+);
+
+router.delete(
+  "/openrouter/messages/:messageId",
+  async (req, res): Promise<void> => {
+    const params = UpdateOpenrouterMessageParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    const [deleted] = await db
+      .delete(messagesTable)
+      .where(eq(messagesTable.id, params.data.messageId))
+      .returning();
+    if (!deleted) {
+      res.status(404).json({ error: "Message not found" });
+      return;
+    }
+    res.sendStatus(204);
   },
 );
 

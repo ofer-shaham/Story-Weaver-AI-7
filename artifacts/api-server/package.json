@@ -8,7 +8,9 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "docs": "echo 'Swagger UI: http://localhost:'${PORT:-8080}'/api/docs'"
+    "docs": "echo 'Swagger UI: http://localhost:'${PORT:-8080}'/api/docs'",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
@@ -28,6 +30,7 @@
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@playwright/test": "^1.48.0",
     "@types/node": "catalog:",
     "@types/swagger-ui-express": "^4.1.8",
     "esbuild": "^0.27.3",

@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { PenLine, BookOpen, Trash2 } from "lucide-react";
 import { useSettings } from "@/hooks/use-settings";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function Home() {
   const { settings, updateSettings } = useSettings();
@@ -87,6 +88,7 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <SettingsDialog settings={settings} onSave={updateSettings} />
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
