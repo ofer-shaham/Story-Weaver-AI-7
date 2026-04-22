@@ -204,11 +204,11 @@ cp artifacts/api-server/config.json.example artifacts/api-server/config.json
 
 - start client/server:
 ```sh
-scripts/init.app.sh
+scripts/init.app.sh restart
 ```
 
 - view logs:
 ```sh
-cat artifacts/api-server/logs/server.log
-cat artifacts/api-server/logs/openrouter.log
+tail -f artifacts/api-server/logs/server.log
+tail -f artifacts/api-server/logs/openrouter.log
 ```
