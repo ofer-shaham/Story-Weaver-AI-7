@@ -1,19 +1,32 @@
 export type SttContinueMode = "off" | "continuous" | "interval";
 
 export interface SttConfig {
+  /** BCP-47 language for SpeechRecognition + playback of user transcription. */
   language: string;
+  /** BCP-47 language used when reading AI paragraphs aloud (TTS). */
+  aiLanguage: string;
+  /** Ms of silence after speech ends before stopping. */
   silenceMs: number;
+  /** Ms before nudging when no speech has started. */
   nudgeMs: number;
+  /** How many nudges to emit before giving up. */
   maxNudges: number;
+  /**
+   * Hard cap (ms) on listening once the user starts speaking. Protects
+   * against the silence detector failing to fire (e.g. noisy environments).
+   */
+  maxSpeechMs: number;
   continueMode: SttContinueMode;
   intervalSeconds: number;
 }
 
 export const STT_DEFAULTS: SttConfig = {
   language: "en-US",
+  aiLanguage: "en-US",
   silenceMs: 4000,
   nudgeMs: 10500,
   maxNudges: 2,
+  maxSpeechMs: 30000,
   continueMode: "off",
   intervalSeconds: 10,
 };

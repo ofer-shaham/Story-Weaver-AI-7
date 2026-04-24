@@ -13,7 +13,9 @@ import { useStoryStream } from "@/hooks/use-story-stream";
 import { useSettings } from "@/hooks/use-settings";
 import { useVoice } from "@/hooks/use-voice";
 import { useSounds } from "@/hooks/use-sounds";
-import { SettingsDialog } from "@/components/settings-dialog";
+import { OpenrouterSettingsDialog } from "@/components/openrouter-settings-dialog";
+import { SttSettingsDialog } from "@/components/stt-settings-dialog";
+import { SttLanguageSwitcher } from "@/components/stt-language-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { DebugPanel } from "@/components/debug-panel";
 import { Button } from "@/components/ui/button";
@@ -191,7 +193,7 @@ export default function Story() {
         if (lastMsg?.role === "assistant" && shouldSpeak) {
           lastHandledMsgIdRef.current = lastMsg.id!;
           setBlindStatus("Reading the story aloud…");
-          await voice.speak(lastMsg.content);
+          await voice.speak(lastMsg.content, cur.stt.aiLanguage);
         }
 
         if (!blindModeEnabledRef.current) return;
@@ -202,6 +204,7 @@ export default function Story() {
           silenceMs: cur.stt.silenceMs,
           nudgeMs: cur.stt.nudgeMs,
           maxNudges: cur.stt.maxNudges,
+          maxSpeechMs: cur.stt.maxSpeechMs,
           language: cur.stt.language,
           onNudge: (n) => {
             playSound("nudge");
@@ -247,10 +250,11 @@ export default function Story() {
           return;
         }
 
-        // 3. Play back what was heard (if option enabled)
+        // 3. Play back what was heard (if option enabled) — use the user's
+        //    speech language so the transcript is read in the same voice.
         if (cur.playUserTranscription) {
           setBlindStatus("Playing back your paragraph…");
-          await voice.speak(transcript.trim());
+          await voice.speak(transcript.trim(), cur.stt.language);
           if (!blindModeEnabledRef.current) return;
         }
 
@@ -329,7 +333,8 @@ export default function Story() {
       async () => {
         // STT ended — play completion sound
         playSound("stt-complete");
-      }
+      },
+      settingsRef.current.stt.language,
     );
     return stop;
   }, [isTyping, voice, playSound]);
@@ -553,8 +558,17 @@ export default function Story() {
             )}
           </Button>
 
+          {/* Quick STT language picker */}
+          <SttLanguageSwitcher
+            value={settings.stt.language}
+            onChange={(lang) =>
+              updateSettings({ stt: { ...settings.stt, language: lang } })
+            }
+          />
+
           <ThemeToggle />
-          <SettingsDialog settings={settings} onSave={updateSettings} />
+          <SttSettingsDialog settings={settings} onSave={updateSettings} />
+          <OpenrouterSettingsDialog settings={settings} onSave={updateSettings} />
         </div>
       </header>
 

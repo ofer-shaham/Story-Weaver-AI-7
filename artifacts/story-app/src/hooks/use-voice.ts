@@ -44,6 +44,12 @@ export interface ListenOptions {
   onNudge?: (nudgeIndex: number) => void;
   /** BCP-47 language tag for SpeechRecognition (e.g. "en-US"). Default "en-US". */
   language?: string;
+  /**
+   * Hard cap (ms) on listening time once the user has actually started
+   * speaking. Useful to prevent the silence detector from getting stuck in
+   * noisy environments. Default 0 (disabled).
+   */
+  maxSpeechMs?: number;
 }
 
 export function useVoice(enabled: boolean) {
@@ -58,8 +64,27 @@ export function useVoice(enabled: boolean) {
     };
   }, []);
 
+  /**
+   * Pick the best available voice for the given BCP-47 lang. Tries an exact
+   * match first, then a language-only match (e.g. "en" for "en-US").
+   */
+  const pickVoice = useCallback((lang: string): SpeechSynthesisVoice | null => {
+    const synth = synthRef.current;
+    if (!synth) return null;
+    const voices = synth.getVoices();
+    if (!voices || voices.length === 0) return null;
+    const target = lang.toLowerCase();
+    const targetBase = target.split("-")[0];
+    const exact = voices.find((v) => v.lang.toLowerCase() === target);
+    if (exact) return exact;
+    const baseMatch = voices.find(
+      (v) => v.lang.toLowerCase().split("-")[0] === targetBase,
+    );
+    return baseMatch ?? null;
+  }, []);
+
   const speak = useCallback(
-    (text: string): Promise<void> => {
+    (text: string, language: string = "en-US"): Promise<void> => {
       return new Promise((resolve) => {
         if (!enabled || !synthRef.current) {
           resolve();
@@ -69,6 +94,12 @@ export function useVoice(enabled: boolean) {
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = 0.95;
         utterance.pitch = 1.0;
+        // Critical: without setting `lang` (and ideally a matching voice) the
+        // browser falls back to the system default, which on some machines is
+        // not the language of the text being spoken.
+        utterance.lang = language;
+        const voice = pickVoice(language);
+        if (voice) utterance.voice = voice;
         utterance.onstart = () => setState("speaking");
         utterance.onend = () => {
           setState("idle");
@@ -81,7 +112,7 @@ export function useVoice(enabled: boolean) {
         synthRef.current.speak(utterance);
       });
     },
-    [enabled]
+    [enabled, pickVoice]
   );
 
   const stopSpeaking = useCallback(() => {
@@ -109,6 +140,7 @@ export function useVoice(enabled: boolean) {
         maxNudges = 0,
         onNudge,
         language = "en-US",
+        maxSpeechMs = 0,
       } = options;
 
       return new Promise((resolve) => {
@@ -133,11 +165,13 @@ export function useVoice(enabled: boolean) {
         let speechDetected = false;
         let silenceTimer: ReturnType<typeof setTimeout> | null = null;
         let nudgeTimer: ReturnType<typeof setTimeout> | null = null;
+        let maxSpeechTimer: ReturnType<typeof setTimeout> | null = null;
         let nudgeCount = 0;
 
         const clearAllTimers = () => {
           if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
           if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null; }
+          if (maxSpeechTimer) { clearTimeout(maxSpeechTimer); maxSpeechTimer = null; }
         };
 
         const resetSilenceTimer = () => {
@@ -170,9 +204,15 @@ export function useVoice(enabled: boolean) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         recognition.onresult = (e: any) => {
           if (!speechDetected) {
-            // First speech detected — cancel nudge, begin silence detection
+            // First speech detected — cancel nudge, begin silence detection,
+            // and arm the hard "max speech" cap if configured.
             speechDetected = true;
             if (nudgeTimer) { clearTimeout(nudgeTimer); nudgeTimer = null; }
+            if (maxSpeechMs > 0) {
+              maxSpeechTimer = setTimeout(() => {
+                recognition.stop();
+              }, maxSpeechMs);
+            }
           }
           let hasContent = false;
           for (let i = e.resultIndex; i < e.results.length; i++) {

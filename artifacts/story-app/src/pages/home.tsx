@@ -15,7 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { PenLine, BookOpen, Trash2 } from "lucide-react";
 import { useSettings } from "@/hooks/use-settings";
-import { SettingsDialog } from "@/components/settings-dialog";
+import { OpenrouterSettingsDialog } from "@/components/openrouter-settings-dialog";
+import { SttSettingsDialog } from "@/components/stt-settings-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function Home() {
@@ -89,7 +90,8 @@ export default function Home() {
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <SettingsDialog settings={settings} onSave={updateSettings} />
+          <SttSettingsDialog settings={settings} onSave={updateSettings} />
+          <OpenrouterSettingsDialog settings={settings} onSave={updateSettings} />
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-full px-6 shadow-md transition-all font-sans font-medium">
