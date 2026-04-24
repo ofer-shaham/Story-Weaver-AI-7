@@ -5,6 +5,7 @@ import {
   useListOpenrouterMessages,
   useUpdateOpenrouterMessage,
   useDeleteOpenrouterMessage,
+  useRegenerateOpenrouterMessage,
   getGetOpenrouterConversationQueryKey,
   getListOpenrouterMessagesQueryKey,
 } from "@workspace/api-client-react";
@@ -74,6 +75,12 @@ export default function Story() {
   } = useStoryStream(id, settings);
   const updateMessage = useUpdateOpenrouterMessage();
   const deleteMessage = useDeleteOpenrouterMessage();
+  const regenerateMessage = useRegenerateOpenrouterMessage();
+  // Track which message is currently being regenerated (so only that row shows
+  // the spinner, not all of them).
+  const [regeneratingMsgId, setRegeneratingMsgId] = useState<number | null>(
+    null,
+  );
 
   const voice = useVoice(settings.blindMode);
   const { playSound } = useSounds();
@@ -321,6 +328,37 @@ export default function Story() {
     queryClient.invalidateQueries({
       queryKey: getListOpenrouterMessagesQueryKey(id),
     });
+  };
+
+  // Regenerate (rewrite) a single paragraph in place using AI completion.
+  // The AI sees only the paragraphs that came BEFORE this one, so the rest of
+  // the story remains untouched.
+  const handleRegenerateMessage = async (messageId: number) => {
+    if (regeneratingMsgId !== null) return;
+    setRegeneratingMsgId(messageId);
+    try {
+      await regenerateMessage.mutateAsync({
+        messageId,
+        data: {
+          model: settings.model || "openrouter/free",
+          maxTokens: settings.maxTokens,
+          temperature: settings.temperature,
+          ...(settings.apiKey ? { apiKey: settings.apiKey } : {}),
+          ...(settings.apiUrl ? { apiUrl: settings.apiUrl } : {}),
+          ...(settings.stt.aiLanguage
+            ? { language: settings.stt.aiLanguage }
+            : {}),
+        },
+      });
+      queryClient.invalidateQueries({
+        queryKey: getListOpenrouterMessagesQueryKey(id),
+      });
+    } catch (err) {
+      console.error("Regenerate failed:", err);
+      playSound("error");
+    } finally {
+      setRegeneratingMsgId(null);
+    }
   };
 
   // Normal mode voice send
@@ -672,6 +710,20 @@ export default function Story() {
                       className="text-muted-foreground hover:text-primary p-1 rounded"
                     >
                       <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleRegenerateMessage(msg.id)}
+                      disabled={regeneratingMsgId !== null}
+                      aria-label="Regenerate passage with AI"
+                      title="Regenerate this paragraph with AI"
+                      data-testid={`button-regenerate-message-${msg.id}`}
+                      className="text-muted-foreground hover:text-primary p-1 rounded disabled:opacity-30"
+                    >
+                      {regeneratingMsgId === msg.id ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5" />
+                      )}
                     </button>
                     <button
                       onClick={() => handleDeleteMessage(msg.id)}

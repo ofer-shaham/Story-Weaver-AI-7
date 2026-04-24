@@ -149,6 +149,52 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OpenrouterError"
+  /openrouter/messages/{messageId}/regenerate:
+    post:
+      operationId: regenerateOpenrouterMessage
+      tags: [openrouter]
+      summary: Regenerate a single message in place using AI completion
+      description: |
+        Replaces the content of an existing message with a freshly AI-generated paragraph.
+        The AI sees only the messages that come BEFORE this one as context, then writes a
+        new paragraph that fits at this position. The message's role and createdAt are preserved.
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegenerateOpenrouterMessageBody"
+      responses:
+        "200":
+          description: Regenerated message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenrouterMessage"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenrouterError"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenrouterError"
+        "500":
+          description: AI completion failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenrouterError"
   /openrouter/completions:
     post:
       operationId: createOpenrouterCompletion
@@ -368,6 +414,25 @@ components:
           type: ["string", "null"]
         apiUrl:
           type: ["string", "null"]
+        language:
+          type: ["string", "null"]
+          description: BCP-47 language code instructing the AI which language to respond in (e.g. en-US, he-IL).
+    RegenerateOpenrouterMessageBody:
+      type: object
+      properties:
+        model:
+          type: string
+        maxTokens:
+          type: ["integer", "null"]
+        temperature:
+          type: ["number", "null"]
+        apiKey:
+          type: ["string", "null"]
+        apiUrl:
+          type: ["string", "null"]
+        language:
+          type: ["string", "null"]
+          description: BCP-47 language code instructing the AI which language to respond in.
     OpenrouterCompletion:
       type: object
       properties:

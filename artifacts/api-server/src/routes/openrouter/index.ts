@@ -14,8 +14,11 @@ import {
   ListOpenrouterMessagesParams,
   SendOpenrouterMessageParams,
   SendOpenrouterMessageBody,
+  TriggerOpenrouterAiTurnBody,
   UpdateOpenrouterMessageParams,
   UpdateOpenrouterMessageBody,
+  RegenerateOpenrouterMessageParams,
+  RegenerateOpenrouterMessageBody,
 } from "@workspace/api-zod";
 import {
   openrouter,
@@ -49,6 +52,29 @@ const DEFAULT_MODEL =
   "openrouter/free";
 
 const router: IRouter = Router();
+
+/**
+ * Build the system prompt for AI completions. Optionally pins the response
+ * language so the AI replies in the user's preferred BCP-47 language even if
+ * the conversation history is in a different language.
+ */
+function buildSystemPrompt(opts: {
+  maxWords: number;
+  language?: string;
+  /** "continue" appends a new paragraph; "fit-here" rewrites in place. */
+  mode: "continue" | "fit-here";
+}): string {
+  const { maxWords, language, mode } = opts;
+  const langClause =
+    language && language.trim()
+      ? ` IMPORTANT LANGUAGE RULE: Write your paragraph in ${language} (BCP-47 language code). Use natural, fluent ${language} regardless of what language earlier turns were written in.`
+      : "";
+  const taskClause =
+    mode === "fit-here"
+      ? "Write exactly one creative paragraph that fits naturally at this point in the story. The paragraph you produce will REPLACE the existing paragraph at this position, so any later paragraphs will follow yours. Do not summarize what came before, do not conclude the story, and avoid repeating earlier wording."
+      : "Write exactly one new creative paragraph that continues the story forward. IMPORTANT: Do not repeat, restate, or paraphrase anything that has already been written — only add brand-new content that hasn't appeared yet. Do not summarize or conclude the story — leave room for the user to continue.";
+  return `You are a collaborative storytelling AI friend. The user and you are writing a story together, taking turns. ${taskClause} Be imaginative and engaging. Your response must be at most ${maxWords} words long — stop at a natural sentence boundary within that limit.${langClause}`;
+}
 
 function getClient(apiKey?: string | null, apiUrl?: string | null): OpenAI {
   const resolvedKey =
@@ -275,17 +301,15 @@ router.post(
       res.status(400).json({ error: params.error.message });
       return;
     }
-    const bodyParsed = SendOpenrouterMessageBody.safeParse({
-      content: "_unused_",
-      ...req.body,
-    });
+    const bodyParsed = TriggerOpenrouterAiTurnBody.safeParse(req.body ?? {});
     if (!bodyParsed.success) {
       res.status(400).json({ error: bodyParsed.error.message });
       return;
     }
 
     const conversationId = params.data.id;
-    const { model, maxTokens, temperature, apiKey, apiUrl } = bodyParsed.data;
+    const { model, maxTokens, temperature, apiKey, apiUrl, language } =
+      bodyParsed.data;
 
     const [conv] = await db
       .select()
@@ -326,7 +350,11 @@ router.post(
       messages: [
         {
           role: "system" as const,
-          content: `You are a collaborative storytelling AI friend. The user and you are writing a story together, taking turns. Write exactly one new creative paragraph that continues the story forward. IMPORTANT: Do not repeat, restate, or paraphrase anything that has already been written — only add brand-new content that hasn't appeared yet. Do not summarize or conclude the story — leave room for the user to continue. Be imaginative and engaging. Your response must be at most ${maxWords} words long — stop at a natural sentence boundary within that limit.`,
+          content: buildSystemPrompt({
+            maxWords,
+            language: language ?? undefined,
+            mode: "continue",
+          }),
         },
         ...chatHistory,
       ],
@@ -494,6 +522,130 @@ router.delete(
       return;
     }
     res.sendStatus(204);
+  },
+);
+
+router.post(
+  "/openrouter/messages/:messageId/regenerate",
+  async (req, res): Promise<void> => {
+    const params = RegenerateOpenrouterMessageParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    const bodyParsed = RegenerateOpenrouterMessageBody.safeParse(req.body ?? {});
+    if (!bodyParsed.success) {
+      res.status(400).json({ error: bodyParsed.error.message });
+      return;
+    }
+
+    const messageId = params.data.messageId;
+    const { model, maxTokens, temperature, apiKey, apiUrl, language } =
+      bodyParsed.data;
+
+    const [target] = await db
+      .select()
+      .from(messagesTable)
+      .where(eq(messagesTable.id, messageId));
+    if (!target) {
+      res.status(404).json({ error: "Message not found" });
+      return;
+    }
+
+    // Build context: every message in this conversation that comes BEFORE
+    // the target (by createdAt then id), with non-empty content.
+    const allMessages = await db
+      .select()
+      .from(messagesTable)
+      .where(eq(messagesTable.conversationId, target.conversationId))
+      .orderBy(messagesTable.createdAt);
+
+    const priorMessages = allMessages.filter((m) => {
+      if (m.id === target.id) return false;
+      if (m.createdAt < target.createdAt) return true;
+      if (m.createdAt > target.createdAt) return false;
+      // Same createdAt — fall back to id ordering
+      return m.id < target.id;
+    });
+
+    const chatHistory = priorMessages
+      .filter((m) => m.content.trim() !== "")
+      .map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+
+    const client = getClient(apiKey, apiUrl);
+    const effectiveModel = model?.trim() || DEFAULT_MODEL;
+    const maxWords = maxTokens ?? 10;
+    const effectiveMaxTokens = Math.ceil(maxWords / 0.75);
+
+    const requestPayload = {
+      model: effectiveModel,
+      max_tokens: effectiveMaxTokens,
+      temperature: temperature ?? undefined,
+      messages: [
+        {
+          role: "system" as const,
+          content: buildSystemPrompt({
+            maxWords,
+            language: language ?? undefined,
+            mode: "fit-here",
+          }),
+        },
+        ...chatHistory,
+      ],
+    };
+
+    const maxAttempts = Math.max(
+      1,
+      Number(process.env.AI_MAX_ATTEMPTS ?? "3"),
+    );
+    let lastError: { status: number; message: string } | null = null;
+    let successContent = "";
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const completion = await client.chat.completions.create({
+          ...requestPayload,
+          stream: false,
+        });
+        const content = completion.choices[0]?.message?.content?.trim() ?? "";
+        if (!content) {
+          lastError = { status: 502, message: "AI returned an empty response" };
+          continue;
+        }
+        successContent = content;
+        break;
+      } catch (err) {
+        const status =
+          err instanceof OpenAI.APIError && typeof err.status === "number"
+            ? err.status
+            : 500;
+        const message =
+          err instanceof Error ? err.message : "AI completion failed";
+        lastError = { status, message };
+        logger.warn(
+          { err, status, attempt, maxAttempts },
+          "openrouter regenerate attempt failed",
+        );
+      }
+    }
+
+    if (!successContent) {
+      const finalStatus = lastError?.status ?? 500;
+      const finalMessage = lastError?.message ?? "AI completion failed";
+      res.status(finalStatus).json({ error: finalMessage });
+      return;
+    }
+
+    const [updated] = await db
+      .update(messagesTable)
+      .set({ content: successContent })
+      .where(eq(messagesTable.id, messageId))
+      .returning();
+
+    res.status(200).json(updated);
   },
 );
 

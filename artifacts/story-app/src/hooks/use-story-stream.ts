@@ -41,6 +41,11 @@ function buildOptionsBody(settings?: StorySettings): Record<string, unknown> {
   body.temperature = settings.temperature;
   if (settings.apiKey) body.apiKey = settings.apiKey;
   if (settings.apiUrl) body.apiUrl = settings.apiUrl;
+  // Pin the AI's response language so the AI replies in whatever language
+  // the user has chosen, even if the conversation history is in another
+  // language. We reuse the TTS playback language because the user almost
+  // always wants the spoken voice to match the generated text.
+  if (settings.stt?.aiLanguage) body.language = settings.stt.aiLanguage;
   return body;
 }
 

@@ -141,7 +141,7 @@ export function SttSettingsDialog({ settings, onSave }: Props) {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="sttAiLanguage">AI reading language</Label>
+              <Label htmlFor="sttAiLanguage">AI friend language</Label>
               <Select
                 value={local.stt.aiLanguage}
                 onValueChange={(v) =>
@@ -167,8 +167,9 @@ export function SttSettingsDialog({ settings, onSave }: Props) {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Voice used to read AI paragraphs aloud. Set this to whatever
-                language the AI replies in.
+                Language the AI writes in (and the voice used to read AI
+                paragraphs aloud). Switch this to chat with the AI in a
+                different language.
               </p>
             </div>
           </div>

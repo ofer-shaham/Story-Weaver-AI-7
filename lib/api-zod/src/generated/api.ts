@@ -90,6 +90,39 @@ export const DeleteOpenrouterMessageParams = zod.object({
 });
 
 /**
+ * Replaces the content of an existing message with a freshly AI-generated paragraph.
+The AI sees only the messages that come BEFORE this one as context, then writes a
+new paragraph that fits at this position. The message's role and createdAt are preserved.
+
+ * @summary Regenerate a single message in place using AI completion
+ */
+export const RegenerateOpenrouterMessageParams = zod.object({
+  messageId: zod.coerce.number(),
+});
+
+export const RegenerateOpenrouterMessageBody = zod.object({
+  model: zod.string().optional(),
+  maxTokens: zod.number().nullish(),
+  temperature: zod.number().nullish(),
+  apiKey: zod.string().nullish(),
+  apiUrl: zod.string().nullish(),
+  language: zod
+    .string()
+    .nullish()
+    .describe(
+      "BCP-47 language code instructing the AI which language to respond in.",
+    ),
+});
+
+export const RegenerateOpenrouterMessageResponse = zod.object({
+  id: zod.number(),
+  conversationId: zod.number(),
+  role: zod.string(),
+  content: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
  * @summary Generate a single AI completion (non-streaming)
  */
 export const CreateOpenrouterCompletionBody = zod.object({
@@ -120,6 +153,12 @@ export const TriggerOpenrouterAiTurnBody = zod.object({
   temperature: zod.number().nullish(),
   apiKey: zod.string().nullish(),
   apiUrl: zod.string().nullish(),
+  language: zod
+    .string()
+    .nullish()
+    .describe(
+      "BCP-47 language code instructing the AI which language to respond in (e.g. en-US, he-IL).",
+    ),
 });
 
 /**

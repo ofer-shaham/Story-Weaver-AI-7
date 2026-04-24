@@ -13,6 +13,7 @@ export * from "./openrouterConversation";
 export * from "./openrouterConversationWithMessages";
 export * from "./openrouterError";
 export * from "./openrouterMessage";
+export * from "./regenerateOpenrouterMessageBody";
 export * from "./sendOpenrouterMessageBody";
 export * from "./triggerOpenrouterAiTurnBody";
 export * from "./updateOpenrouterMessageBody";

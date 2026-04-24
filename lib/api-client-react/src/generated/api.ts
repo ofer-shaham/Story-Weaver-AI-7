@@ -24,6 +24,7 @@ import type {
   OpenrouterConversationWithMessages,
   OpenrouterError,
   OpenrouterMessage,
+  RegenerateOpenrouterMessageBody,
   SendOpenrouterMessageBody,
   TriggerOpenrouterAiTurnBody,
   UpdateOpenrouterMessageBody,
@@ -634,6 +635,102 @@ export const useDeleteOpenrouterMessage = <
   TContext
 > => {
   return useMutation(getDeleteOpenrouterMessageMutationOptions(options));
+};
+
+/**
+ * Replaces the content of an existing message with a freshly AI-generated paragraph.
+The AI sees only the messages that come BEFORE this one as context, then writes a
+new paragraph that fits at this position. The message's role and createdAt are preserved.
+
+ * @summary Regenerate a single message in place using AI completion
+ */
+export const getRegenerateOpenrouterMessageUrl = (messageId: number) => {
+  return `/api/openrouter/messages/${messageId}/regenerate`;
+};
+
+export const regenerateOpenrouterMessage = async (
+  messageId: number,
+  regenerateOpenrouterMessageBody?: RegenerateOpenrouterMessageBody,
+  options?: RequestInit,
+): Promise<OpenrouterMessage> => {
+  return customFetch<OpenrouterMessage>(
+    getRegenerateOpenrouterMessageUrl(messageId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(regenerateOpenrouterMessageBody),
+    },
+  );
+};
+
+export const getRegenerateOpenrouterMessageMutationOptions = <
+  TError = ErrorType<OpenrouterError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof regenerateOpenrouterMessage>>,
+    TError,
+    { messageId: number; data: BodyType<RegenerateOpenrouterMessageBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof regenerateOpenrouterMessage>>,
+  TError,
+  { messageId: number; data: BodyType<RegenerateOpenrouterMessageBody> },
+  TContext
+> => {
+  const mutationKey = ["regenerateOpenrouterMessage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof regenerateOpenrouterMessage>>,
+    { messageId: number; data: BodyType<RegenerateOpenrouterMessageBody> }
+  > = (props) => {
+    const { messageId, data } = props ?? {};
+
+    return regenerateOpenrouterMessage(messageId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RegenerateOpenrouterMessageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof regenerateOpenrouterMessage>>
+>;
+export type RegenerateOpenrouterMessageMutationBody =
+  BodyType<RegenerateOpenrouterMessageBody>;
+export type RegenerateOpenrouterMessageMutationError =
+  ErrorType<OpenrouterError>;
+
+/**
+ * @summary Regenerate a single message in place using AI completion
+ */
+export const useRegenerateOpenrouterMessage = <
+  TError = ErrorType<OpenrouterError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof regenerateOpenrouterMessage>>,
+    TError,
+    { messageId: number; data: BodyType<RegenerateOpenrouterMessageBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof regenerateOpenrouterMessage>>,
+  TError,
+  { messageId: number; data: BodyType<RegenerateOpenrouterMessageBody> },
+  TContext
+> => {
+  return useMutation(getRegenerateOpenrouterMessageMutationOptions(options));
 };
 
 /**

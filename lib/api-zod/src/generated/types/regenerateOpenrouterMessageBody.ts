@@ -6,7 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface TriggerOpenrouterAiTurnBody {
+export interface RegenerateOpenrouterMessageBody {
   model?: string;
   /** @nullable */
   maxTokens?: number | null;
@@ -17,7 +17,7 @@ export interface TriggerOpenrouterAiTurnBody {
   /** @nullable */
   apiUrl?: string | null;
   /**
-   * BCP-47 language code instructing the AI which language to respond in (e.g. en-US, he-IL).
+   * BCP-47 language code instructing the AI which language to respond in.
    * @nullable
    */
   language?: string | null;

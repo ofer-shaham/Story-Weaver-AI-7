@@ -62,6 +62,28 @@ export interface TriggerOpenrouterAiTurnBody {
   apiKey?: string | null;
   /** @nullable */
   apiUrl?: string | null;
+  /**
+   * BCP-47 language code instructing the AI which language to respond in (e.g. en-US, he-IL).
+   * @nullable
+   */
+  language?: string | null;
+}
+
+export interface RegenerateOpenrouterMessageBody {
+  model?: string;
+  /** @nullable */
+  maxTokens?: number | null;
+  /** @nullable */
+  temperature?: number | null;
+  /** @nullable */
+  apiKey?: string | null;
+  /** @nullable */
+  apiUrl?: string | null;
+  /**
+   * BCP-47 language code instructing the AI which language to respond in.
+   * @nullable
+   */
+  language?: string | null;
 }
 
 export interface OpenrouterCompletion {

@@ -32,6 +32,8 @@ A collaborative storytelling app where the user and AI take turns writing story 
 - **Frontend**: React + Vite at `/`
 - **Model**: `meta-llama/llama-4-scout` via OpenRouter
 - **DB tables**: `conversations`, `messages`
-- **API routes**: `/api/openrouter/conversations`, `/api/openrouter/conversations/:id/messages` (SSE stream)
+- **API routes**: `/api/openrouter/conversations`, `/api/openrouter/conversations/:id/messages` (SSE stream), `/api/openrouter/conversations/:id/ai-turn`, `/api/openrouter/messages/:id` (PATCH/DELETE), `/api/openrouter/messages/:id/regenerate` (POST: rewrites a single paragraph in place using only prior context).
+- **AI language**: `settings.stt.aiLanguage` (BCP-47, e.g. `en-US`, `he-IL`) is sent as the `language` body field to AI endpoints; the backend `buildSystemPrompt` helper in `routes/openrouter/index.ts` injects an instruction so the AI replies in that language regardless of the chat history language. Same value also drives TTS playback voice in `useVoice.speak()`.
+- **Regenerate UI**: per-message hover button (Sparkles icon) in `story.tsx` next to edit/delete; only the targeted paragraph is replaced, all later paragraphs are preserved.
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
