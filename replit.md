@@ -15,7 +15,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
-- **AI**: OpenRouter via Replit AI Integrations (lib/integrations-openrouter-ai)
+- **AI**: OpenRouter via Replit AI Integrations (lib/integrations-openrouter-ai). Uses env vars `AI_INTEGRATIONS_OPENROUTER_BASE_URL` / `AI_INTEGRATIONS_OPENROUTER_API_KEY` provisioned by the Replit OpenRouter blueprint. Leave `apiKey`/`apiUrl` out of `artifacts/api-server/config.json` so the env vars are used.
 
 ## Key Commands
 
