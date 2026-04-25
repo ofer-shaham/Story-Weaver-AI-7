@@ -16,7 +16,11 @@ import { useVoice } from "@/hooks/use-voice";
 import { useSounds } from "@/hooks/use-sounds";
 import { OpenrouterSettingsDialog } from "@/components/openrouter-settings-dialog";
 import { SttSettingsDialog } from "@/components/stt-settings-dialog";
-import { SttLanguageSwitcher } from "@/components/stt-language-switcher";
+import {
+  SttLanguageSwitcher,
+  VIEW_OFF,
+} from "@/components/stt-language-switcher";
+import { TranslatedLine } from "@/components/translated-line";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { DebugPanel } from "@/components/debug-panel";
 import { Button } from "@/components/ui/button";
@@ -598,6 +602,7 @@ export default function Story() {
 
           {/* Quick STT (speech recognition) language picker */}
           <SttLanguageSwitcher
+            label="You"
             value={settings.stt.language}
             onChange={(lang) =>
               updateSettings({ stt: { ...settings.stt, language: lang } })
@@ -608,10 +613,20 @@ export default function Story() {
               `language` field sent on every AI completion request. */}
           <SttLanguageSwitcher
             variant="ai"
+            label="AI"
             value={settings.stt.aiLanguage}
             onChange={(lang) =>
               updateSettings({ stt: { ...settings.stt, aiLanguage: lang } })
             }
+          />
+
+          {/* On-screen translation language — when set, every paragraph is
+              translated below the original via Google Translate. */}
+          <SttLanguageSwitcher
+            variant="view"
+            label="View"
+            value={settings.viewLanguage}
+            onChange={(lang) => updateSettings({ viewLanguage: lang })}
           />
 
           <ThemeToggle />
@@ -712,6 +727,13 @@ export default function Story() {
               ) : (
                 <div className="relative">
                   <div className="whitespace-pre-wrap">{msg.content}</div>
+                  {settings.viewLanguage &&
+                    settings.viewLanguage !== VIEW_OFF && (
+                      <TranslatedLine
+                        text={msg.content}
+                        toLang={settings.viewLanguage}
+                      />
+                    )}
                   <div className="absolute -right-8 top-0.5 flex flex-col gap-1 opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity">
                     <button
                       onClick={() => startEdit(msg.id, msg.content)}

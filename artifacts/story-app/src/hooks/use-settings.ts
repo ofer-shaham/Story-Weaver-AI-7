@@ -13,6 +13,13 @@ export interface StorySettings {
   playUserTranscription: boolean;
   gameMode: GameMode;
   stt: SttConfig;
+  /**
+   * BCP-47 language to display each story line translated into. Set to
+   * "off" to show only the original text. The translation is rendered
+   * inline below each paragraph and powered by Google Translate's free
+   * public endpoint (no API key required).
+   */
+  viewLanguage: string;
 }
 
 const STORAGE_KEY = "story-together-settings";
@@ -27,6 +34,7 @@ const DEFAULTS: StorySettings = {
   playUserTranscription: true,
   gameMode: "auto",
   stt: { ...STT_DEFAULTS },
+  viewLanguage: "off",
 };
 
 function load(): StorySettings {
