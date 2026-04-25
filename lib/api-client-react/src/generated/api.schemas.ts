@@ -20,6 +20,11 @@ export interface OpenrouterMessage {
   conversationId: number;
   role: string;
   content: string;
+  /**
+   * BCP-47 language tag of the message content (used to pick the right TTS voice).
+   * @nullable
+   */
+  language?: string | null;
   createdAt: string;
 }
 
@@ -39,6 +44,11 @@ export interface SendOpenrouterMessageBody {
   /** @nullable */
   apiUrl?: string | null;
   skipAiCompletion?: boolean;
+  /**
+   * BCP-47 language tag of the user message; persisted so TTS playback later uses the correct voice.
+   * @nullable
+   */
+  language?: string | null;
 }
 
 export interface OpenrouterConversationWithMessages {
@@ -50,6 +60,11 @@ export interface OpenrouterConversationWithMessages {
 
 export interface UpdateOpenrouterMessageBody {
   content: string;
+  /**
+   * BCP-47 language tag of the updated content (overrides the saved language when provided).
+   * @nullable
+   */
+  language?: string | null;
 }
 
 export interface TriggerOpenrouterAiTurnBody {

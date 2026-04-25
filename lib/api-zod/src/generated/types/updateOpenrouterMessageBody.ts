@@ -8,4 +8,9 @@
 
 export interface UpdateOpenrouterMessageBody {
   content: string;
+  /**
+   * BCP-47 language tag of the updated content (overrides the saved language when provided).
+   * @nullable
+   */
+  language?: string | null;
 }

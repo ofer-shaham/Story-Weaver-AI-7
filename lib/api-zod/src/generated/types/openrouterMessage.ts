@@ -11,5 +11,10 @@ export interface OpenrouterMessage {
   conversationId: number;
   role: string;
   content: string;
+  /**
+   * BCP-47 language tag of the message content (used to pick the right TTS voice).
+   * @nullable
+   */
+  language?: string | null;
   createdAt: Date;
 }

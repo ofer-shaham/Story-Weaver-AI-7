@@ -20,6 +20,15 @@ export interface StorySettings {
    * public endpoint (no API key required).
    */
   viewLanguage: string;
+  /**
+   * Per-language playback speed (rate) for text-to-speech, keyed by the
+   * BCP-47 language tag (e.g. { "en-US": 1.0, "ja-JP": 0.85 }). When a
+   * language is missing from this map the global `ttsRateDefault` is used.
+   * Range matches SpeechSynthesisUtterance.rate (typically 0.5–2.0).
+   */
+  ttsRates: Record<string, number>;
+  /** Default playback rate when a language has no explicit override. */
+  ttsRateDefault: number;
 }
 
 const STORAGE_KEY = "story-together-settings";
@@ -35,6 +44,8 @@ const DEFAULTS: StorySettings = {
   gameMode: "auto",
   stt: { ...STT_DEFAULTS },
   viewLanguage: "off",
+  ttsRates: {},
+  ttsRateDefault: 0.95,
 };
 
 function load(): StorySettings {
@@ -46,6 +57,7 @@ function load(): StorySettings {
         ...DEFAULTS,
         ...parsed,
         stt: { ...DEFAULTS.stt, ...(parsed.stt ?? {}) },
+        ttsRates: { ...DEFAULTS.ttsRates, ...(parsed.ttsRates ?? {}) },
       };
     }
   } catch {}

@@ -83,8 +83,19 @@ export function useVoice(enabled: boolean) {
     return baseMatch ?? null;
   }, []);
 
+  /**
+   * Speak `text` using the browser's SpeechSynthesis API.
+   *
+   * @param text     Text to read aloud.
+   * @param language BCP-47 tag for the text (e.g. "en-US"). Determines both
+   *                 the picked voice and the utterance.lang.
+   * @param rate     Playback rate in the SpeechSynthesisUtterance range
+   *                 (~0.5–2.0). Defaults to 0.95 to preserve previous
+   *                 behaviour. Caller-provided rate lets the story page
+   *                 honour per-language playback-speed preferences.
+   */
   const speak = useCallback(
-    (text: string, language: string = "en-US"): Promise<void> => {
+    (text: string, language: string = "en-US", rate: number = 0.95): Promise<void> => {
       return new Promise((resolve) => {
         if (!enabled || !synthRef.current) {
           resolve();
@@ -92,7 +103,9 @@ export function useVoice(enabled: boolean) {
         }
         synthRef.current.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.95;
+        // Clamp to the spec's allowed range so an out-of-bounds value from
+        // settings doesn't silently disable speech.
+        utterance.rate = Math.min(Math.max(rate, 0.1), 10);
         utterance.pitch = 1.0;
         // Critical: without setting `lang` (and ideally a matching voice) the
         // browser falls back to the system default, which on some machines is

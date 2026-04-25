@@ -11,6 +11,14 @@ export const messages = pgTable("messages", {
     .references(() => conversations.id, { onDelete: "cascade" }),
   role: text("role").notNull(),
   content: text("content").notNull(),
+  /**
+   * BCP-47 language tag of the text in `content` (e.g. "en-US", "ja-JP").
+   * Stored alongside each message so later text-to-speech playback can
+   * select the correct voice/language even when individual messages were
+   * authored in different languages within the same conversation.
+   * Nullable for backwards compatibility with pre-migration rows.
+   */
+  language: text("language"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

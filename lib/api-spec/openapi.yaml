@@ -340,6 +340,9 @@ components:
           type: string
         content:
           type: string
+        language:
+          type: ["string", "null"]
+          description: BCP-47 language tag of the message content (used to pick the right TTS voice).
         createdAt:
           type: string
           format: date-time
@@ -373,6 +376,9 @@ components:
           type: ["string", "null"]
         skipAiCompletion:
           type: boolean
+        language:
+          type: ["string", "null"]
+          description: BCP-47 language tag of the user message; persisted so TTS playback later uses the correct voice.
       required:
         - content
     OpenrouterConversationWithMessages:
@@ -399,6 +405,9 @@ components:
       properties:
         content:
           type: string
+        language:
+          type: ["string", "null"]
+          description: BCP-47 language tag of the updated content (overrides the saved language when provided).
       required:
         - content
     TriggerOpenrouterAiTurnBody:

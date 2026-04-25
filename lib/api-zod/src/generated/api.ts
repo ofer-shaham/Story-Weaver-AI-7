@@ -51,6 +51,12 @@ export const GetOpenrouterConversationResponse = zod.object({
       conversationId: zod.number(),
       role: zod.string(),
       content: zod.string(),
+      language: zod
+        .string()
+        .nullish()
+        .describe(
+          "BCP-47 language tag of the message content (used to pick the right TTS voice).",
+        ),
       createdAt: zod.coerce.date(),
     }),
   ),
@@ -72,6 +78,12 @@ export const UpdateOpenrouterMessageParams = zod.object({
 
 export const UpdateOpenrouterMessageBody = zod.object({
   content: zod.string(),
+  language: zod
+    .string()
+    .nullish()
+    .describe(
+      "BCP-47 language tag of the updated content (overrides the saved language when provided).",
+    ),
 });
 
 export const UpdateOpenrouterMessageResponse = zod.object({
@@ -79,6 +91,12 @@ export const UpdateOpenrouterMessageResponse = zod.object({
   conversationId: zod.number(),
   role: zod.string(),
   content: zod.string(),
+  language: zod
+    .string()
+    .nullish()
+    .describe(
+      "BCP-47 language tag of the message content (used to pick the right TTS voice).",
+    ),
   createdAt: zod.coerce.date(),
 });
 
@@ -119,6 +137,12 @@ export const RegenerateOpenrouterMessageResponse = zod.object({
   conversationId: zod.number(),
   role: zod.string(),
   content: zod.string(),
+  language: zod
+    .string()
+    .nullish()
+    .describe(
+      "BCP-47 language tag of the message content (used to pick the right TTS voice).",
+    ),
   createdAt: zod.coerce.date(),
 });
 
@@ -133,6 +157,12 @@ export const CreateOpenrouterCompletionBody = zod.object({
   apiKey: zod.string().nullish(),
   apiUrl: zod.string().nullish(),
   skipAiCompletion: zod.boolean().optional(),
+  language: zod
+    .string()
+    .nullish()
+    .describe(
+      "BCP-47 language tag of the user message; persisted so TTS playback later uses the correct voice.",
+    ),
 });
 
 export const CreateOpenrouterCompletionResponse = zod.object({
@@ -173,6 +203,12 @@ export const ListOpenrouterMessagesResponseItem = zod.object({
   conversationId: zod.number(),
   role: zod.string(),
   content: zod.string(),
+  language: zod
+    .string()
+    .nullish()
+    .describe(
+      "BCP-47 language tag of the message content (used to pick the right TTS voice).",
+    ),
   createdAt: zod.coerce.date(),
 });
 export const ListOpenrouterMessagesResponse = zod.array(
@@ -194,4 +230,10 @@ export const SendOpenrouterMessageBody = zod.object({
   apiKey: zod.string().nullish(),
   apiUrl: zod.string().nullish(),
   skipAiCompletion: zod.boolean().optional(),
+  language: zod
+    .string()
+    .nullish()
+    .describe(
+      "BCP-47 language tag of the user message; persisted so TTS playback later uses the correct voice.",
+    ),
 });

@@ -65,7 +65,16 @@ export function useStoryStream(conversationId: number, settings?: StorySettings)
     async (content: string): Promise<boolean> => {
       setStreamError(null);
       const endpoint = `/api/openrouter/conversations/${conversationId}/messages`;
-      const requestBody = { content, skipAiCompletion: true };
+      // Tag the saved user message with the BCP-47 language they were
+      // speaking/typing in. The server stores this so later TTS playback can
+      // pick a matching voice even when the conversation mixes languages.
+      const requestBody: Record<string, unknown> = {
+        content,
+        skipAiCompletion: true,
+      };
+      if (settings?.stt?.language) {
+        requestBody.language = settings.stt.language;
+      }
       const start = performance.now();
       let status: number | null = null;
       let responseJson: unknown = null;
@@ -101,7 +110,7 @@ export function useStoryStream(conversationId: number, settings?: StorySettings)
         });
       }
     },
-    [conversationId, invalidate],
+    [conversationId, settings, invalidate],
   );
 
   const requestAiTurn = useCallback(async (): Promise<boolean> => {

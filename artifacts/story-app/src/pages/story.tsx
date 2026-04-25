@@ -16,6 +16,7 @@ import { useVoice } from "@/hooks/use-voice";
 import { useSounds } from "@/hooks/use-sounds";
 import { OpenrouterSettingsDialog } from "@/components/openrouter-settings-dialog";
 import { SttSettingsDialog } from "@/components/stt-settings-dialog";
+import { TtsSpeedDialog } from "@/components/tts-speed-dialog";
 import {
   SttLanguageSwitcher,
   VIEW_OFF,
@@ -42,6 +43,8 @@ import {
   AlertCircle,
   Trash2,
   RefreshCw,
+  Play,
+  StopCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -116,6 +119,78 @@ export default function Story() {
   const errorSoundPlayedRef = useRef(false);
   // When true, the loop gave up after max nudges and should not auto-restart
   const gaveUpRef = useRef(false);
+
+  // --- "Play story" full-conversation TTS playback ---
+  // Tracks whether the user has pressed the header Play button. We use a ref
+  // alongside the state so the async per-message loop can detect a Stop press
+  // mid-flight without waiting for React to re-render.
+  const [isPlayingStory, setIsPlayingStory] = useState(false);
+  const isPlayingStoryRef = useRef(false);
+
+  /**
+   * Resolve which BCP-47 language a saved message should be read in. Prefers
+   * the language stored on the row (set when the message was first created),
+   * but falls back to the user's active STT/AI language for legacy rows that
+   * pre-date the schema migration so older stories still play back sensibly.
+   */
+  const resolveMessageLanguage = useCallback(
+    (msg: { role: string; language?: string | null }): string => {
+      if (msg.language) return msg.language;
+      return msg.role === "assistant"
+        ? settings.stt.aiLanguage
+        : settings.stt.language;
+    },
+    [settings.stt.aiLanguage, settings.stt.language],
+  );
+
+  /** Look up the configured playback rate for a given language. */
+  const rateForLanguage = useCallback(
+    (lang: string): number =>
+      settings.ttsRates[lang] ?? settings.ttsRateDefault,
+    [settings.ttsRates, settings.ttsRateDefault],
+  );
+
+  const stopPlayingStory = useCallback(() => {
+    isPlayingStoryRef.current = false;
+    setIsPlayingStory(false);
+    voice.stopSpeaking();
+  }, [voice]);
+
+  const handlePlayStory = useCallback(async () => {
+    if (isPlayingStoryRef.current) {
+      // Second click acts as a Stop button.
+      stopPlayingStory();
+      return;
+    }
+    if (!messages || messages.length === 0) return;
+
+    isPlayingStoryRef.current = true;
+    setIsPlayingStory(true);
+    try {
+      for (const msg of messages) {
+        if (!isPlayingStoryRef.current) break;
+        const text = msg.content?.trim();
+        if (!text) continue;
+        const lang = resolveMessageLanguage(msg);
+        const rate = rateForLanguage(lang);
+        await voice.speak(text, lang, rate);
+      }
+    } finally {
+      isPlayingStoryRef.current = false;
+      setIsPlayingStory(false);
+    }
+  }, [messages, voice, resolveMessageLanguage, rateForLanguage, stopPlayingStory]);
+
+  // If the user leaves the page or the messages list reloads while playing,
+  // make sure we don't keep speaking stale audio.
+  useEffect(() => {
+    return () => {
+      if (isPlayingStoryRef.current) {
+        isPlayingStoryRef.current = false;
+        voice.stopSpeaking();
+      }
+    };
+  }, [voice]);
 
   useEffect(() => {
     blindModeEnabledRef.current = settings.blindMode;
@@ -204,7 +279,14 @@ export default function Story() {
         if (lastMsg?.role === "assistant" && shouldSpeak) {
           lastHandledMsgIdRef.current = lastMsg.id!;
           setBlindStatus("Reading the story aloud…");
-          await voice.speak(lastMsg.content, cur.stt.aiLanguage);
+          // Prefer the language saved with the message; fall back to the
+          // current AI-language setting for legacy rows.
+          const lang = lastMsg.language ?? cur.stt.aiLanguage;
+          await voice.speak(
+            lastMsg.content,
+            lang,
+            cur.ttsRates[lang] ?? cur.ttsRateDefault,
+          );
         }
 
         if (!blindModeEnabledRef.current) return;
@@ -265,7 +347,11 @@ export default function Story() {
         //    speech language so the transcript is read in the same voice.
         if (cur.playUserTranscription) {
           setBlindStatus("Playing back your paragraph…");
-          await voice.speak(transcript.trim(), cur.stt.language);
+          await voice.speak(
+            transcript.trim(),
+            cur.stt.language,
+            cur.ttsRates[cur.stt.language] ?? cur.ttsRateDefault,
+          );
           if (!blindModeEnabledRef.current) return;
         }
 
@@ -629,7 +715,33 @@ export default function Story() {
             onChange={(lang) => updateSettings({ viewLanguage: lang })}
           />
 
+          {/* Play / Stop the entire story — reads each saved message in
+              its own configured language, at the per-language playback
+              rate set in the speed dialog. Disabled until messages load. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handlePlayStory}
+            disabled={!messages || messages.length === 0}
+            className={cn(
+              isPlayingStory
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            aria-label={isPlayingStory ? "Stop reading story" : "Play story"}
+            aria-pressed={isPlayingStory}
+            title={isPlayingStory ? "Stop reading" : "Play story aloud"}
+            data-testid="button-play-story"
+          >
+            {isPlayingStory ? (
+              <StopCircle className="w-5 h-5" />
+            ) : (
+              <Play className="w-5 h-5" />
+            )}
+          </Button>
+
           <ThemeToggle />
+          <TtsSpeedDialog settings={settings} onSave={updateSettings} />
           <SttSettingsDialog settings={settings} onSave={updateSettings} />
           <OpenrouterSettingsDialog settings={settings} onSave={updateSettings} />
         </div>

@@ -18,4 +18,9 @@ export interface SendOpenrouterMessageBody {
   /** @nullable */
   apiUrl?: string | null;
   skipAiCompletion?: boolean;
+  /**
+   * BCP-47 language tag of the user message; persisted so TTS playback later uses the correct voice.
+   * @nullable
+   */
+  language?: string | null;
 }

@@ -202,6 +202,7 @@ router.post(
       apiKey,
       apiUrl,
       skipAiCompletion,
+      language,
     } = bodyParsed.data;
 
     const [conv] = await db
@@ -219,6 +220,9 @@ router.post(
         conversationId,
         role: "user",
         content: userContent,
+        // Persist the language tag the client claimed for this user message
+        // so later TTS playback can read it back in the correct voice.
+        language: language ?? null,
       })
       .returning();
 
@@ -279,6 +283,9 @@ router.post(
           conversationId,
           role: "assistant",
           content: fullResponse,
+          // Streaming branch carries no explicit AI-language hint, so fall
+          // back to the user-message language (best guess for TTS).
+          language: language ?? null,
         });
       }
 
@@ -443,6 +450,9 @@ router.post(
           conversationId,
           role: "assistant",
           content: successContent,
+          // The AI was instructed to respond in `language`; persist that so
+          // TTS playback later reads this paragraph in the matching voice.
+          language: language ?? null,
         })
         .returning();
 
@@ -496,9 +506,19 @@ router.patch(
     // After editing an AI (assistant) message, change owner to user.
     const newRole = existing.role === "assistant" ? "user" : existing.role;
 
+    // Only overwrite `language` when the client explicitly sent one (it's
+    // optional in the schema). This avoids wiping a previously-saved tag.
+    const updates: { content: string; role: string; language?: string | null } = {
+      content: body.data.content,
+      role: newRole,
+    };
+    if (body.data.language !== undefined) {
+      updates.language = body.data.language ?? null;
+    }
+
     const [updated] = await db
       .update(messagesTable)
-      .set({ content: body.data.content, role: newRole })
+      .set(updates)
       .where(eq(messagesTable.id, params.data.messageId))
       .returning();
     res.json(updated);
@@ -641,7 +661,12 @@ router.post(
 
     const [updated] = await db
       .update(messagesTable)
-      .set({ content: successContent })
+      .set({
+        content: successContent,
+        // Regeneration honoured the requested `language`; record it so the
+        // refreshed paragraph plays back in the right voice next time.
+        ...(language !== undefined ? { language: language ?? null } : {}),
+      })
       .where(eq(messagesTable.id, messageId))
       .returning();
 
