@@ -309,6 +309,16 @@ export default function Story() {
    */
   const [playingMsgId, setPlayingMsgId] = useState<number | null>(null);
   const [currentWordIdx, setCurrentWordIdx] = useState<number | null>(null);
+  // Ref-mirror of `playingMsgId` so the blind-mode loop (which reads via
+  // refs to avoid re-firing on every render) can synchronously check
+  // whether a manual per-message playback is currently in progress and
+  // bail out — preventing the blind loop from auto-speaking a new
+  // assistant message in the middle of a Play-All / Play-One run and
+  // interrupting an in-flight translation utterance.
+  const playingMsgIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    playingMsgIdRef.current = playingMsgId;
+  }, [playingMsgId]);
 
   const stopPlayingStory = useCallback(() => {
     isPlayingStoryRef.current = false;
@@ -501,6 +511,14 @@ export default function Story() {
     if (blindLoopRunningRef.current) return;
     if (gaveUpRef.current) return;
     if (!messages) return;
+    // If the user is currently driving a manual playback (Play All header
+    // button OR a per-message Play), bail out *without* recording the
+    // cycle key so the loop will re-trigger once playback ends. This is
+    // critical: otherwise the blind loop's `voice.speak()` call for the
+    // newest assistant message races against `handlePlayStory` /
+    // `handlePlayMessage` and interrupts in-flight translation
+    // utterances mid-word (you'd hear ~0.8s of French then silence).
+    if (isPlayingStoryRef.current || playingMsgIdRef.current != null) return;
 
     const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
     const lastMsgKey = lastMsg ? `${lastMsg.id}` : "empty";
@@ -628,6 +646,11 @@ export default function Story() {
     playSound,
     refreshTick,
     clearIntervalRetry,
+    // Re-run when manual playback ends (playingMsgId → null,
+    // isPlayingStory → false) so the blind loop resumes its
+    // read-listen cycle for any newly-arrived assistant message.
+    playingMsgId,
+    isPlayingStory,
   ]);
 
   // Cleanup the interval-retry timer when blind mode turns off / unmount
