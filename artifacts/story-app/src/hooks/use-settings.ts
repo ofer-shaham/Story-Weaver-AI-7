@@ -4,13 +4,17 @@ import { STT_DEFAULTS, type SttConfig } from "@/config/stt";
 export type GameMode = "auto" | "manual";
 
 /**
- * How translations are spoken when the header Play / per-message Play
- * buttons are pressed.
- *  - "off"  → only the original paragraph is spoken (current behaviour)
- *  - "with" → original first, then each selected translation in order
- *  - "only" → only the translations are spoken; original is skipped
- *
- * `viewLanguages` controls which target languages get spoken (and shown).
+ * Sentinel value used inside `ttsPlayOrder` to represent "speak the
+ * original-language paragraph" (as opposed to a translation). Keeping it
+ * as a string in the same array keeps ordering trivial and lets the user
+ * place the original anywhere in the play sequence.
+ */
+export const PLAY_ORIGINAL = "original" as const;
+
+/**
+ * Legacy enum that replaced the original boolean. Still kept (and read in
+ * the migration) so older persisted settings can be upgraded to
+ * `ttsPlayOrder` without losing intent. New code should not read this.
  */
 export type TtsTranslationMode = "off" | "with" | "only";
 
@@ -34,8 +38,21 @@ export interface StorySettings {
    * (no API key required).
    */
   viewLanguages: string[];
-  /** See {@link TtsTranslationMode}. */
-  ttsTranslationMode: TtsTranslationMode;
+  /**
+   * Ordered list of items to speak when the user presses Play. Each entry
+   * is either {@link PLAY_ORIGINAL} (= speak the message in its source
+   * language) or a BCP-47 code from `viewLanguages` (= speak the
+   * translated text). Items absent from this list are silently skipped,
+   * letting the user pick *which* translations get spoken and in what
+   * order — independent of which translations are *displayed* on screen.
+   *
+   * Kept loosely in sync with `viewLanguages`: when the user adds a new
+   * view language it is auto-appended here so playback "just works"; when
+   * a view language is removed it is also pruned from this list. Users
+   * who want a non-default order or to skip a translation use the TTS
+   * Play Order dialog (`tts-play-order-dialog.tsx`).
+   */
+  ttsPlayOrder: string[];
   /**
    * Per-language playback speed (rate) for text-to-speech, keyed by the
    * BCP-47 language tag (e.g. { "en-US": 1.0, "ja-JP": 0.85 }). When a
@@ -60,8 +77,11 @@ export interface StorySettings {
  * as outdated and re-defaulted in `load()`.
  *  - 1: introduced after `ttsTranslationMode` was added with a `"off"`
  *       default; bumping to "with" so picking View languages auto-plays.
+ *  - 2: replaced `ttsTranslationMode` with the richer `ttsPlayOrder`
+ *       array. Migration derives the order from the prior mode +
+ *       viewLanguages so users keep the playback they had configured.
  */
-const SETTINGS_VERSION = 1;
+const SETTINGS_VERSION = 2;
 
 const STORAGE_KEY = "story-together-settings";
 
@@ -76,10 +96,9 @@ const DEFAULTS: StorySettings = {
   gameMode: "auto",
   stt: { ...STT_DEFAULTS },
   viewLanguages: [],
-  // Default: "with" → as soon as the user picks a View language it gets
-  // spoken alongside the original. Users who'd rather only see (not hear)
-  // translations can flip this to "off" from the Play dropdown.
-  ttsTranslationMode: "with",
+  // Default play order: just the original. As soon as the user picks a
+  // View language it gets auto-appended (see `syncPlayOrderForView`).
+  ttsPlayOrder: [PLAY_ORIGINAL],
   ttsRates: {},
   ttsRateDefault: 0.95,
   settingsVersion: SETTINGS_VERSION,
@@ -89,7 +108,41 @@ const DEFAULTS: StorySettings = {
 type LegacyStorySettings = Partial<StorySettings> & {
   /** Replaced by `viewLanguages: string[]`. Migrated on load. */
   viewLanguage?: string;
+  /** Replaced by `ttsPlayOrder: string[]` (settingsVersion 2). */
+  ttsTranslationMode?: TtsTranslationMode;
 };
+
+/**
+ * Build a default play order from a `viewLanguages` list — original
+ * first, then each translation in the order the user picked them. Used
+ * by both the v2 migration and the runtime sync helper.
+ */
+function defaultPlayOrder(viewLanguages: string[]): string[] {
+  return [PLAY_ORIGINAL, ...viewLanguages];
+}
+
+/**
+ * Reconcile `ttsPlayOrder` against the current `viewLanguages`:
+ *   - drop entries that are no longer a view language (and aren't the
+ *     special "original" sentinel),
+ *   - append any view language not already in the order so newly added
+ *     translations start playing immediately.
+ *
+ * `PLAY_ORIGINAL` is preserved if present and added back when missing
+ * (so the default play order always at least contains the original).
+ */
+export function syncPlayOrderForView(
+  currentOrder: string[],
+  viewLanguages: string[],
+): string[] {
+  const allowed = new Set<string>([PLAY_ORIGINAL, ...viewLanguages]);
+  const kept = currentOrder.filter((item) => allowed.has(item));
+  const next = kept.includes(PLAY_ORIGINAL) ? kept : [PLAY_ORIGINAL, ...kept];
+  for (const lang of viewLanguages) {
+    if (!next.includes(lang)) next.push(lang);
+  }
+  return next;
+}
 
 function load(): StorySettings {
   try {
@@ -107,21 +160,31 @@ function load(): StorySettings {
         viewLanguages = [parsed.viewLanguage];
       }
       const storedVersion = parsed.settingsVersion ?? 0;
-      // Schema migration: any payload below the current version gets the
-      // affected fields re-defaulted. v1 forces ttsTranslationMode to the
-      // new default ("with") because the previous default "off" silently
-      // suppressed translation playback even when languages were picked.
-      const ttsTranslationMode =
-        storedVersion < 1
-          ? DEFAULTS.ttsTranslationMode
-          : parsed.ttsTranslationMode ?? DEFAULTS.ttsTranslationMode;
+      // v2 migration: derive `ttsPlayOrder` from the previous
+      // `ttsTranslationMode` enum + `viewLanguages` so users keep the
+      // playback intent they had configured. New default is "everything
+      // in selection order" — original then each translation.
+      let ttsPlayOrder: string[];
+      if (Array.isArray(parsed.ttsPlayOrder) && storedVersion >= 2) {
+        // Already on v2 or newer — keep what was saved but reconcile
+        // against the current viewLanguages (handles cases where the
+        // user removed a view language without opening the dialog).
+        ttsPlayOrder = syncPlayOrderForView(parsed.ttsPlayOrder, viewLanguages);
+      } else if (parsed.ttsTranslationMode === "off") {
+        ttsPlayOrder = [PLAY_ORIGINAL];
+      } else if (parsed.ttsTranslationMode === "only") {
+        ttsPlayOrder = [...viewLanguages];
+      } else {
+        // "with" (or anything unrecognised) → default behaviour.
+        ttsPlayOrder = defaultPlayOrder(viewLanguages);
+      }
       return {
         ...DEFAULTS,
         ...parsed,
         stt: { ...DEFAULTS.stt, ...(parsed.stt ?? {}) },
         ttsRates: { ...DEFAULTS.ttsRates, ...(parsed.ttsRates ?? {}) },
         viewLanguages,
-        ttsTranslationMode,
+        ttsPlayOrder,
         settingsVersion: SETTINGS_VERSION,
       };
     }

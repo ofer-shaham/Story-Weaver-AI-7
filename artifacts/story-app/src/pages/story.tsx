@@ -19,9 +19,14 @@ import { SttSettingsDialog } from "@/components/stt-settings-dialog";
 import { TtsSpeedDialog } from "@/components/tts-speed-dialog";
 import { SttLanguageSwitcher } from "@/components/stt-language-switcher";
 import { ViewLanguagesSwitcher } from "@/components/view-languages-switcher";
-import { TtsTranslationModeSwitcher } from "@/components/tts-translation-mode-switcher";
+import { TtsPlayOrderDialog } from "@/components/tts-play-order-dialog";
 import { TranslatedLine } from "@/components/translated-line";
 import { translate, toGoogleLang } from "@/lib/translate";
+import {
+  PLAY_ORIGINAL,
+  syncPlayOrderForView,
+  type StorySettings,
+} from "@/hooks/use-settings";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { DebugPanel } from "@/components/debug-panel";
 import { Button } from "@/components/ui/button";
@@ -198,8 +203,14 @@ export default function Story() {
 
   /**
    * Build the ordered list of (text, lang, rate) units that should be
-   * spoken for a single message, honouring the current
-   * `ttsTranslationMode` and `viewLanguages` settings.
+   * spoken for a single message, in the exact order configured by the
+   * user via the TTS Play Order dialog (`settings.ttsPlayOrder`).
+   *
+   * Each entry in `ttsPlayOrder` is either `PLAY_ORIGINAL` (= speak the
+   * source paragraph) or a BCP-47 code (= fetch & speak the translation
+   * to that language). Entries the user removed are skipped; entries
+   * referencing a language that's no longer in `viewLanguages` are also
+   * skipped (defensive — the sync helper normally prevents this).
    *
    * Translations are fetched through `queryClient.fetchQuery` using the
    * same key as `<TranslatedLine>` so on-screen translations and
@@ -230,46 +241,52 @@ export default function Story() {
       }> = [];
 
       const origLang = resolveMessageLanguage(msg);
-      const origRate = rateForLanguage(origLang);
+      const viewSet = new Set(settings.viewLanguages);
 
-      const includeOriginal = settings.ttsTranslationMode !== "only";
-      const includeTranslations =
-        settings.ttsTranslationMode !== "off" &&
-        settings.viewLanguages.length > 0;
-
-      if (includeOriginal) {
-        units.push({ text, lang: origLang, rate: origRate, isOriginal: true });
-      }
-
-      if (includeTranslations) {
-        for (const target of settings.viewLanguages) {
-          const googleTarget = toGoogleLang(target);
-          try {
-            const translated = await queryClient.fetchQuery({
-              queryKey: ["translation", googleTarget, text],
-              queryFn: () =>
-                translate({
-                  finalTranscriptProxy: text,
-                  fromLang: "auto",
-                  toLang: googleTarget,
-                }),
-              staleTime: Infinity,
-              gcTime: Infinity,
+      for (const item of settings.ttsPlayOrder) {
+        if (item === PLAY_ORIGINAL) {
+          units.push({
+            text,
+            lang: origLang,
+            rate: rateForLanguage(origLang),
+            isOriginal: true,
+          });
+          continue;
+        }
+        // Defensive: the sync helper normally prunes stale entries, but
+        // bail if a code isn't currently a view language so we don't
+        // surprise-translate to something the user removed.
+        if (!viewSet.has(item)) continue;
+        const googleTarget = toGoogleLang(item);
+        try {
+          const translated = await queryClient.fetchQuery({
+            queryKey: ["translation", googleTarget, text],
+            queryFn: () =>
+              translate({
+                finalTranscriptProxy: text,
+                fromLang: "auto",
+                toLang: googleTarget,
+              }),
+            staleTime: Infinity,
+            gcTime: Infinity,
+          });
+          if (translated && translated !== "translation error") {
+            units.push({
+              text: translated,
+              lang: item,
+              rate: rateForLanguage(item),
+              isOriginal: false,
             });
-            if (translated && translated !== "translation error") {
-              units.push({
-                text: translated,
-                lang: target,
-                rate: rateForLanguage(target),
-                isOriginal: false,
-              });
-            }
-          } catch (err) {
+          } else {
             console.warn(
-              `[story] translation fetch failed msg=${msg.id} target=${target}`,
-              err,
+              `[story] translation empty/error msg=${msg.id} target=${item} → skipped`,
             );
           }
+        } catch (err) {
+          console.warn(
+            `[story] translation fetch failed msg=${msg.id} target=${item}`,
+            err,
+          );
         }
       }
 
@@ -279,7 +296,7 @@ export default function Story() {
       queryClient,
       resolveMessageLanguage,
       rateForLanguage,
-      settings.ttsTranslationMode,
+      settings.ttsPlayOrder,
       settings.viewLanguages,
     ],
   );
@@ -951,18 +968,30 @@ export default function Story() {
 
           {/* On-screen translation languages (multi-select). Each selected
               BCP-47 code renders its own translated line below every
-              paragraph and (per `ttsTranslationMode`) is also spoken. */}
+              paragraph. The TTS Play Order dialog (next icon) governs
+              which of these are also spoken and in what order. */}
           <ViewLanguagesSwitcher
             label="View"
             value={settings.viewLanguages}
-            onChange={(langs) => updateSettings({ viewLanguages: langs })}
+            onChange={(langs) =>
+              updateSettings({
+                viewLanguages: langs,
+                // Keep the play queue in step with the visible languages —
+                // newly picked languages auto-play, removed ones drop out.
+                ttsPlayOrder: syncPlayOrderForView(
+                  settings.ttsPlayOrder,
+                  langs,
+                ),
+              })
+            }
           />
 
-          {/* How translations are spoken: original only / both / translation only. */}
-          <TtsTranslationModeSwitcher
-            value={settings.ttsTranslationMode}
-            onChange={(mode) => updateSettings({ ttsTranslationMode: mode })}
-            hasTranslations={settings.viewLanguages.length > 0}
+          {/* TTS playback order — opens a dialog where the user can pick
+              which items (original + translations) get spoken and in
+              what sequence. */}
+          <TtsPlayOrderDialog
+            settings={settings}
+            onSave={(patch: Partial<StorySettings>) => updateSettings(patch)}
           />
 
           {/* Play / Stop the entire story — reads each saved message in
