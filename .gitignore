@@ -2,6 +2,7 @@
 
 # compiled output
 dist
+**/dist
 tmp
 out-tsc
 *.tsbuildinfo
@@ -10,6 +11,12 @@ out-tsc
 
 # dependencies
 node_modules
+**/node_modules
+
+# package manager
+.pnpm
+.pnpm-store
+**/.pnp
 
 # IDEs and editors
 /.idea
@@ -41,11 +48,36 @@ testem.log
 .DS_Store
 Thumbs.db
 
+# Cursor
 .cursor/rules/nx-rules.mdc
+
+# GitHub
 .github/instructions/nx.instructions.md
 
 # Replit
 .cache/
 .local/
+.replit-artifact/
+**/.replit-artifact/
 
+# Project specific
+# API server config (contains secrets)
 artifacts/api-server/config.json
+
+# Logs
+logs
+**/logs
+*.log
+
+# Test results
+test-results
+**/test-results
+
+# Build artifacts
+.pids/
+**/.pids/
+
+# Environment variables
+.env
+.env.local
+.env.*.local

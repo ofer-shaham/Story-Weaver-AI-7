@@ -1,0 +1,78 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Build outputs
+dist
+**/dist
+*.tsbuildinfo
+
+# Source code (for published packages, only include dist)
+src
+**/*.ts
+!**/*.d.ts
+
+# Tests
+tests
+**/*.test.*
+**/*.spec.*
+
+# Development files
+.github
+.vscode
+.idea
+*.md
+!README.md
+
+# Config files
+*.config.*
+tsconfig.json
+**/*.config.json
+
+# Logs
+logs
+**/logs
+*.log
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# CI/CD
+.github
+
+# Development artifacts
+attached_assets/
+.cache/
+.local/
+.pids/
+**/.pids/
+
+# Docker
+Dockerfile*
+docker-compose.yml
+.dockerignore
+
+# Scripts
+scripts/
+*.sh
+
+# Replit
+.replit*
+**/.replit-artifact/
+
+# Package manager files
+pnpm-lock.yaml
+.pnpm
+**/.pnp

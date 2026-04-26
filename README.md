@@ -1,6 +1,31 @@
 # Story Together
 
-A collaborative storytelling app where you and an AI take turns writing paragraphs of a story. Supports both typed and hands-free (Blind Mode) interaction using speech-to-text and text-to-speech.
+---
+
+## Project Structure
+
+```
+├── artifacts/                    # Application packages
+│   ├── api-server/              # Backend API server
+│   ├── story-app/               # Frontend React application
+│   └── mockup-sandbox/          # Development mockups
+├── lib/                         # Shared libraries
+│   ├── api-client-react/        # React API client
+│   ├── api-spec/                # OpenAPI specifications
+│   ├── api-zod/                 # Zod schemas
+│   ├── db/                      # Database utilities
+│   └── integrations-openrouter-ai/ # AI integration
+├── scripts/                     # Utility scripts
+├── Dockerfile.api               # API server container
+├── Dockerfile.app               # Frontend container
+├── docker-compose.yml           # Service orchestration
+├── .dockerignore               # Docker build exclusions
+├── .env.example                # Environment template
+├── .env                        # Local environment (gitignored)
+├── start-services.sh           # Development startup script
+├── troubleshoot.sh             # Diagnostic script
+└── pnpm-workspace.yaml         # Workspace configuration
+```
 
 ---
 
@@ -47,6 +72,58 @@ OpenRouter settings are read from this file **first**, before falling back to en
 
 ---
 
+## Docker Configuration
+
+This project includes a complete Docker setup for development and deployment:
+
+### Docker Files
+
+| File | Description |
+|------|-------------|
+| `docker-compose.yml` | Main orchestration file defining all services (db, api, app) |
+| `Dockerfile.api` | Multi-stage build for the API server |
+| `Dockerfile.app` | Multi-stage build for the frontend application |
+| `.dockerignore` | Excludes unnecessary files from Docker build context |
+| `.env.example` | Template for environment variables |
+| `.env` | Local environment configuration (gitignored) |
+
+### Services
+
+- **db**: PostgreSQL 16 database with health checks
+- **api**: Node.js API server on port 8080 with OpenRouter integration
+- **app**: Vite-based React frontend on port 5173
+
+### Environment Variables
+
+The following environment variables are required and configured via `.env`:
+
+```bash
+# Database
+DATABASE_URL=postgresql://story:story@db:5432/story_together
+
+# API Server
+PORT=8080
+
+# OpenRouter AI Integration
+AI_INTEGRATIONS_OPENROUTER_API_KEY=your-openrouter-api-key-here
+AI_INTEGRATIONS_OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_MODEL=meta-llama/llama-4-scout
+
+# Development
+LOG_LEVEL=debug
+NODE_ENV=development
+```
+
+### Development Scripts
+
+| Script | Description |
+|--------|-------------|
+| `./start-services.sh` | Start all services with logging and health checks |
+| `./start-services.sh --build` | Force rebuild images before starting |
+| `./troubleshoot.sh` | Comprehensive diagnostics and logging |
+
+---
+
 ## Running without Docker
 
 ### 1. Install dependencies
@@ -57,7 +134,14 @@ pnpm install
 
 ### 2. Set environment variables
 
-Create a `.env` file or export variables in your shell:
+Copy `.env.example` to `.env` and fill in your values:
+
+```bash
+cp .env.example .env
+# Edit .env with your actual values
+```
+
+Or export variables in your shell:
 
 ```bash
 export DATABASE_URL="postgresql://user:password@localhost:5432/story_together"
@@ -89,31 +173,67 @@ The app will be available at `http://localhost:5173`.
 
 ## Running with Docker Compose
 
-### 1. Build and start all services
+### Quick Start
+
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your OpenRouter API key
+# Then start all services:
+./start-services.sh
+```
+
+### Manual Setup
+
+#### 1. Set environment variables
+
+Copy and configure the environment file:
+
+```bash
+cp .env.example .env
+# Edit .env with your actual OpenRouter API key and other values
+```
+
+#### 2. Build and start all services
 
 ```bash
 docker-compose up --build
 ```
 
+Or use the provided script:
+
+```bash
+./start-services.sh
+```
+
 The app will be available at `http://localhost:5173`.
 
-### 2. Run database migrations (first time only)
+#### 3. Run database migrations (first time only)
 
 ```bash
 docker-compose exec api pnpm --filter @workspace/db run push
 ```
 
-### 3. Stop services
+### Development Workflow
 
-```bash
-docker-compose down
-```
+| Command | Description |
+|---------|-------------|
+| `./start-services.sh` | Start all services (skip build if images exist) |
+| `./start-services.sh --build` | Force rebuild all images |
+| `./troubleshoot.sh` | Run diagnostics if services fail |
+| `docker-compose logs -f` | Follow all service logs |
+| `docker-compose restart` | Restart all services |
+| `docker-compose down` | Stop all services |
 
-To also remove the database volume:
+### Troubleshooting
 
-```bash
-docker-compose down -v
-```
+If services fail to start:
+
+1. Run `./troubleshoot.sh` for detailed diagnostics
+2. Check logs: `docker-compose logs api`
+3. Verify `.env` file has correct values
+4. Try force rebuild: `./start-services.sh --build`
 
 ---
 
@@ -163,6 +283,9 @@ Errors appear as `"level": 50` (ERROR) entries in the JSON stream.
 ```bash
 docker-compose logs api
 docker-compose logs -f api   # follow in real time
+
+# Or use the troubleshooting script for comprehensive diagnostics:
+./troubleshoot.sh
 ```
 
 **On Replit:** Open the "Start Backend" workflow console in the workspace.
@@ -182,6 +305,14 @@ Filter by `Error` level to see only errors. Network errors (failed API calls) al
 
 ## Key commands
 
+### Development Scripts
+| Command                                          | Description                                  |
+|--------------------------------------------------|----------------------------------------------|
+| `./start-services.sh`                            | Start all Docker services                    |
+| `./start-services.sh --build`                    | Force rebuild and start services             |
+| `./troubleshoot.sh`                              | Run comprehensive diagnostics                |
+
+### Package Management
 | Command                                          | Description                                  |
 |--------------------------------------------------|----------------------------------------------|
 | `pnpm install`                                   | Install all workspace dependencies           |
@@ -189,8 +320,15 @@ Filter by `Error` level to see only errors. Network errors (failed API calls) al
 | `pnpm run typecheck`                             | Type-check all packages                      |
 | `pnpm --filter @workspace/db run push`           | Push DB schema changes                       |
 | `pnpm --filter @workspace/api-spec run codegen`  | Regenerate API hooks and Zod schemas         |
+
+### Service Management
+| Command                                          | Description                                  |
+|--------------------------------------------------|----------------------------------------------|
 | `pnpm --filter @workspace/api-server run dev`    | Start API server in dev mode                 |
 | `pnpm --filter @workspace/story-app run dev`     | Start frontend dev server                    |
+| `docker-compose logs -f`                          | Follow all service logs                      |
+| `docker-compose restart`                          | Restart all services                         |
+| `docker-compose down`                             | Stop all services                            |
 
 
 ---

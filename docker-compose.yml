@@ -18,30 +18,39 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
-    restart: unless-stopped
+    restart: "no"
     depends_on:
       db:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://story:story@db:5432/story_together
-      PORT: "8080"
+      CI: "true"
     volumes:
+      - ./:/app:cached
+      - /app/node_modules
       - ./artifacts/api-server/config.json:/app/artifacts/api-server/config.json:ro
     ports:
       - "8080:8080"
+    command: ["/bin/sh", "-lc", "cd /app && corepack pnpm install --frozen-lockfile && pnpm --filter @workspace/api-server run dev"]
 
   app:
     build:
       context: .
       dockerfile: Dockerfile.app
-    restart: unless-stopped
+    restart: "no"
     depends_on:
       - api
     environment:
       PORT: "5173"
       BASE_PATH: "/"
+      CI: "true"
+    volumes:
+      - ./:/app:cached
+      - /app/node_modules
     ports:
       - "5173:5173"
+    command: ["/bin/sh", "-lc", "cd /app && corepack pnpm install --frozen-lockfile && pnpm --filter @workspace/story-app run dev"]
 
 volumes:
   db_data:

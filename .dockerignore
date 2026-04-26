@@ -1,0 +1,60 @@
+# Dependencies
+node_modules
+**/node_modules
+.pnpm
+.pnpm-store
+**/.pnp
+
+# Build outputs
+dist
+**/dist
+*.tsbuildinfo
+
+# Logs
+logs
+**/logs
+*.log
+
+# Test files and results
+test-results
+**/test-results
+coverage
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Documentation and development files
+README.md
+*.md
+!artifacts/**/README.md
+
+# Config files that might contain secrets
+artifacts/api-server/config.json
+
+# Development artifacts
+attached_assets/
+.cache/
+.local/
+.pids/
+**/.pids/
+
+# Replit specific
+.replit
+.replit-artifact/
+**/.replit-artifact/
+
+# Temporary files
+tmp
+*.tmp
