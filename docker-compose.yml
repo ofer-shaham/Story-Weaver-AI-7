@@ -32,7 +32,7 @@ services:
       - ./artifacts/api-server/config.json:/app/artifacts/api-server/config.json:ro
     ports:
       - "8080:8080"
-    command: ["/bin/sh", "-lc", "cd /app && corepack pnpm install --frozen-lockfile && pnpm --filter @workspace/api-server run dev"]
+    command: ["/bin/sh", "-lc", "cd /app && corepack pnpm install --frozen-lockfile && pnpm --filter @workspace/db run push && pnpm --filter @workspace/api-server run dev"]
 
   app:
     build:
